@@ -15,3 +15,8 @@ Optional: activate one probe id explicitly:
 ```bash
 mvn test -DargLine="-javaagent:/absolute/path/to/perturbate-1.0-SNAPSHOT.jar -Djunit.jupiter.extensions.autodetection.enabled=true -Dperturb.activeProbe=42 -Dperturb.outDir=target/perturb"
 ```
+
+To run all agent steps on a project:
+```bash
+python <path_to_python_runner> <path_to_project_dir> <path_to_agent_jar>
+```
