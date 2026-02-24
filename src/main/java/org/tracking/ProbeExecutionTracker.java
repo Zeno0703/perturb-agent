@@ -4,18 +4,16 @@ import org.utils.FileUtils;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class ProbeExecutionTracker {
+public class ProbeExecutionTracker {
 
     private static final Map<String, Set<Integer>> hits = new ConcurrentHashMap<>();
 
     public static void record(String testId, int probeId) {
-        hits.computeIfAbsent(testId, k -> Collections.synchronizedSet(new HashSet<>())).add(probeId);
+        hits.computeIfAbsent(testId, k -> ConcurrentHashMap.newKeySet()).add(probeId);
     }
 
     public static void clear() {

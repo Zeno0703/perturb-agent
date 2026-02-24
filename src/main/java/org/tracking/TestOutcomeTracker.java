@@ -7,13 +7,9 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class TestOutcomeTracker {
+public class TestOutcomeTracker {
 
     private static final Map<String, Boolean> outcomes = new ConcurrentHashMap<>();
-
-    private TestOutcomeTracker() {
-        throw new UnsupportedOperationException("Utility class");
-    }
 
     public static void pass(String testId) {
         outcomes.put(testId, true);

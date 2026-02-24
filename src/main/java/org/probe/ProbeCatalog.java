@@ -8,16 +8,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class ProbeCatalog {
+public class ProbeCatalog {
 
     private static final Map<String, Integer> locations = new ConcurrentHashMap<>();
     private static final Map<Integer, String> descriptions = new ConcurrentHashMap<>();
     private static final Set<Integer> probes = ConcurrentHashMap.newKeySet();
     private static volatile boolean frozen = false;
-
-    private ProbeCatalog() {
-        throw new UnsupportedOperationException("Utility class");
-    }
 
     public static int idForLocation(String locationKey) {
         if (frozen) {

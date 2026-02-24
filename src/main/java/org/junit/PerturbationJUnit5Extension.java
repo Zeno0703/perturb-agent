@@ -7,7 +7,7 @@ import org.junit.jupiter.api.extension.TestWatcher;
 import org.tracking.TestContext;
 import org.tracking.TestOutcomeTracker;
 
-public final class PerturbationJUnit5Extension implements BeforeEachCallback, AfterEachCallback, TestWatcher {
+public class PerturbationJUnit5Extension implements BeforeEachCallback, AfterEachCallback, TestWatcher {
 
     @Override
     public void beforeEach(ExtensionContext context) {

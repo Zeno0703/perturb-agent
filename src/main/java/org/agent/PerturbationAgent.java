@@ -9,13 +9,14 @@ import java.lang.instrument.Instrumentation;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public final class PerturbationAgent {
+public class PerturbationAgent {
 
     public static void premain(String agentArgs, Instrumentation inst) {
         Path outDir = Path.of(System.getProperty("perturb.outDir", "target/perturb"));
         try {
             Files.createDirectories(outDir);
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         TestOutcomeTracker.clear();
         ProbeExecutionTracker.clear();

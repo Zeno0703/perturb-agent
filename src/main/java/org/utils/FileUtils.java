@@ -7,11 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-public final class FileUtils {
-
-    private FileUtils() {
-        throw new UnsupportedOperationException("Utility class");
-    }
+public class FileUtils {
 
     public static void writeAtomic(Path file, String content) throws IOException {
         Files.createDirectories(file.toAbsolutePath().getParent());

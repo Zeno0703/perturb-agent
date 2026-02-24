@@ -7,7 +7,9 @@ import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
 import java.util.List;
 
-public final class InstrumentationController {
+import static net.bytebuddy.matcher.ElementMatchers.nameStartsWith;
+
+public class InstrumentationController {
     public static void install(Instrumentation inst) {
         List<PerturbationStrategy> strategies = List.of(
                 new ReturnPerturbationStrategy()
@@ -15,13 +17,17 @@ public final class InstrumentationController {
 
         new AgentBuilder.Default()
                 .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
-                .ignore(net.bytebuddy.matcher.ElementMatchers.nameStartsWith("net.bytebuddy.")
-                        .or(net.bytebuddy.matcher.ElementMatchers.nameStartsWith("org.junit."))
-                        .or(net.bytebuddy.matcher.ElementMatchers.nameStartsWith("org.apache.maven."))
-                        .or(net.bytebuddy.matcher.ElementMatchers.nameStartsWith("java."))
-                        .or(net.bytebuddy.matcher.ElementMatchers.nameStartsWith("javax."))
-                        .or(net.bytebuddy.matcher.ElementMatchers.nameStartsWith("jdk."))
-                        .or(net.bytebuddy.matcher.ElementMatchers.nameStartsWith("sun.")))
+                .ignore(nameStartsWith("net.bytebuddy.")
+                        .or(nameStartsWith("org.junit."))
+                        .or(nameStartsWith("org.apache.maven."))
+                        .or(nameStartsWith("java."))
+                        .or(nameStartsWith("javax."))
+                        .or(nameStartsWith("jdk."))
+                        .or(nameStartsWith("sun."))
+                        .or(nameStartsWith("org.probe."))
+                        .or(nameStartsWith("org.tracking."))
+                        .or(nameStartsWith("org.instrumentation."))
+                        .or(nameStartsWith("org.agent.")))
                 .type((typeDesc, classLoader, module, classBeingRedefined, pd) ->
                         isLikelyProjectClass(pd)
                                 && !typeDesc.isInterface()
@@ -36,10 +42,6 @@ public final class InstrumentationController {
                     return modifiedBuilder;
                 })
                 .installOn(inst);
-    }
-
-    private InstrumentationController() {
-        throw new UnsupportedOperationException("Utility class");
     }
 
     private static boolean isLikelyProjectClass(ProtectionDomain pd) {

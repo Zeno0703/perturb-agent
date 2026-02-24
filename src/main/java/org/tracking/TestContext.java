@@ -1,12 +1,8 @@
 package org.tracking;
 
-public final class TestContext {
+public class TestContext {
 
     private static final ThreadLocal<String> current = new ThreadLocal<>();
-
-    private TestContext() {
-        throw new UnsupportedOperationException("Utility class");
-    }
 
     public static void enter(String id) {
         current.set(id);

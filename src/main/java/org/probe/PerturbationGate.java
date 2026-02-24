@@ -3,11 +3,7 @@ package org.probe;
 import org.tracking.ProbeExecutionTracker;
 import org.tracking.TestContext;
 
-public final class PerturbationGate {
-
-    private PerturbationGate() {
-        throw new UnsupportedOperationException("Utility class");
-    }
+public class PerturbationGate {
 
     public static int apply(int value, int probeId) {
         track(probeId);
