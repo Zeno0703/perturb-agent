@@ -25,12 +25,12 @@ public final class ProbeCatalog {
         }
 
         return locations.computeIfAbsent(locationKey, key -> {
-            int id = Math.abs(key.hashCode());
-            while (probes.contains(id)) {
+            int id = key.hashCode() & 0x7fffffff;
+
+            while (!probes.add(id)) {
                 id++;
             }
 
-            probes.add(id);
             return id;
         });
     }
@@ -48,11 +48,7 @@ public final class ProbeCatalog {
     }
 
     public static String descriptionFor(int probeId) {
-        String description = descriptions.get(probeId);
-        if (description != null) {
-            return description;
-        }
-        return "probe " + probeId;
+        return descriptions.getOrDefault(probeId, "probe " + probeId);
     }
 
     public static void dumpTo(Path file) throws IOException {
