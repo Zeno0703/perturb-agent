@@ -37,6 +37,12 @@ public class PerturbationAgent {
             }
 
             try {
+                ProbeExecutionTracker.dumpActionsTo(outDir.resolve("perturbations.txt"));
+            } catch (Exception e) {
+                System.out.println("Failed to dump perturbations: " + e.getMessage());
+            }
+
+            try {
                 TestOutcomeTracker.dumpTo(outDir.resolve("test-outcomes.txt"));
             } catch (Exception e) {
                 System.out.println("Failed to dump test outcomes: " + e.getMessage());

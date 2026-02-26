@@ -6,7 +6,7 @@ import signal
 from collections import defaultdict
 
 OUT_DIR = "target/perturb"
-ARTIFACTS = ("probes.txt", "hits.txt", "test-outcomes.txt")
+ARTIFACTS = ("probes.txt", "hits.txt", "test-outcomes.txt", "perturbations.txt")
 
 
 def clear_artifacts(project_dir):
@@ -93,11 +93,22 @@ def evaluate(probe_id, tests, project_dir, agent_jar, target_package, timeout_li
         print(f"  No outcomes produced:\n{stderr[-1000:]}")
         return None, False
 
+    actions_map = {}
+    for test_id, action in read_artifact(project_dir, "perturbations.txt"):
+        if test_id not in actions_map:
+            actions_map[test_id] = []
+        if action not in actions_map[test_id]:
+            actions_map[test_id].append(action)
+
     failed = sum(1 for test in tests if outcomes.get(test, "MISSING") not in ("PASS", "MISSING"))
     passed = sum(1 for test in tests if outcomes.get(test, "MISSING") == "PASS")
 
     for test in sorted(tests):
-        print(f"  - {test}: {outcomes.get(test, 'MISSING')}")
+        status = outcomes.get(test, 'MISSING')
+        test_actions = actions_map.get(test, [])
+        action_str = f"  ({', '.join(test_actions)})" if test_actions else ""
+
+        print(f"  - {test}: {status}{action_str}")
 
     total = failed + passed
     if total == 0:

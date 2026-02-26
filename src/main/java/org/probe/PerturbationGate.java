@@ -8,7 +8,9 @@ public class PerturbationGate {
     public static int apply(int value, int probeId) {
         track(probeId);
         if (PerturbationController.isActive(probeId)) {
-            return value + 1;
+            int newValue = value + 1;
+            ProbeExecutionTracker.recordAction(value, newValue);
+            return newValue;
         }
         return value;
     }
@@ -16,7 +18,18 @@ public class PerturbationGate {
     public static boolean apply(boolean value, int probeId) {
         track(probeId);
         if (PerturbationController.isActive(probeId)) {
-            return !value;
+            boolean newValue = !value;
+            ProbeExecutionTracker.recordAction(value, newValue);
+            return newValue;
+        }
+        return value;
+    }
+
+    public static Object apply(Object value, int probeId) {
+        track(probeId);
+        if (PerturbationController.isActive(probeId)) {
+            ProbeExecutionTracker.recordAction(value, "null");
+            return null;
         }
         return value;
     }

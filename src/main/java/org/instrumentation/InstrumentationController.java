@@ -16,6 +16,8 @@ public class InstrumentationController {
 
     public static void install(Instrumentation inst) {
         List<PerturbationStrategy> strategies = List.of(
+                new ArgumentPerturbationStrategy(),
+                new VariablePerturbationStrategy(),
                 new ReturnPerturbationStrategy()
         );
 
