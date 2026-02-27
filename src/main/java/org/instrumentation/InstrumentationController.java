@@ -39,10 +39,7 @@ public class InstrumentationController {
                         .or(nameStartsWith("org.agent.")))
                 .type((typeDesc, classLoader, module, classBeingRedefined, pd) -> {
                     boolean isTargetClass = !TARGET_PACKAGE.isEmpty() ? typeDesc.getName().startsWith(TARGET_PACKAGE) : isLikelyProjectClass(pd);
-                    return isTargetClass
-                            && !typeDesc.isInterface()
-                            && !typeDesc.isAnnotation()
-                            && !typeDesc.isEnum();
+                    return isTargetClass && !typeDesc.isInterface() && !typeDesc.isAnnotation() && !typeDesc.isEnum();
                 })
                 .transform((builderInstance, type, loader, module, domain) -> {
                     DynamicType.Builder<?> modifiedBuilder = builderInstance;

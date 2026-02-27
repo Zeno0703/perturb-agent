@@ -7,7 +7,7 @@ import org.probe.PerturbationGate;
 import org.probe.ProbeCatalog;
 
 import static net.bytebuddy.matcher.ElementMatchers.returns;
-import static net.bytebuddy.matcher.ElementMatchers.not;
+import static net.bytebuddy.matcher.ElementMatchers.isSubTypeOf;
 
 public class ReturnPerturbationStrategy implements PerturbationStrategy {
 
@@ -16,15 +16,7 @@ public class ReturnPerturbationStrategy implements PerturbationStrategy {
         return builder
                 .visit(Advice.to(IntegerAdvice.class).on(returns(int.class)))
                 .visit(Advice.to(BooleanAdvice.class).on(returns(boolean.class)))
-                .visit(Advice.to(ObjectAdvice.class).on(not(returns(int.class))
-                        .and(not(returns(boolean.class)))
-                        .and(not(returns(byte.class)))
-                        .and(not(returns(short.class)))
-                        .and(not(returns(char.class)))
-                        .and(not(returns(long.class)))
-                        .and(not(returns(float.class)))
-                        .and(not(returns(double.class)))
-                        .and(not(returns(void.class)))));
+                .visit(Advice.to(ObjectAdvice.class).on(returns(isSubTypeOf(Object.class))));
     }
 
     public static int resolveProbe(String locationKey, String type) {
