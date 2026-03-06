@@ -7,21 +7,20 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ProbeExecutionTracker {
 
     private static final Map<String, Set<Integer>> hits = new ConcurrentHashMap<>();
-    private static final Set<String> actions = ConcurrentHashMap.newKeySet();
+    private static final Queue<String> actions = new ConcurrentLinkedQueue<>();
 
     public static void record(String testId, int probeId) {
         hits.computeIfAbsent(testId, k -> ConcurrentHashMap.newKeySet()).add(probeId);
     }
 
-    public static void recordAction(Object original, Object perturbed) {
-        String testId = TestContext.getCurrent();
-        String prefix = (testId != null) ? testId : "UNKNOWN_TEST";
-
-        actions.add(prefix + "\t" + original + " -> " + perturbed);
+    public static void recordAction(String testId, Object original, Object perturbed) {
+        actions.add(testId + "\t" + original + " -> " + perturbed);
     }
 
     public static void clear() {

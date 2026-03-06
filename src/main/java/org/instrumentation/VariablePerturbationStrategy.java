@@ -29,7 +29,7 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
         int probeId = ProbeCatalog.idForLocation(locationKey);
 
         if (probeId != -1) {
-            ProbeCatalog.describe(probeId, "Modified local variable at index " + varIndex + " in " + methodName);
+            ProbeCatalog.describe(probeId, "Modified integer local variable at index " + varIndex + " in " + methodName);
             return PerturbationGate.apply(value, probeId);
         }
         return value;

@@ -56,6 +56,7 @@ def run_maven(probe_id, project_dir, agent_jar, target_package, timeout_limit=No
 def unescape(text):
     return text.replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t").replace("\\\\", "\\")
 
+
 def read_artifact(project_dir, filename):
     path = os.path.join(project_dir, OUT_DIR, filename)
     try:
@@ -75,6 +76,7 @@ def read_artifact(project_dir, filename):
             return result
     except FileNotFoundError:
         return []
+
 
 def discovery(project_dir, agent_jar, target_package):
     print("Running Discovery Phase...")
@@ -99,17 +101,16 @@ def discovery(project_dir, agent_jar, target_package):
 
 
 def evaluate(probe_id, tests, project_dir, agent_jar, target_package, timeout_limit):
-    code, stderr, timed_out = run_maven(probe_id, project_dir, agent_jar, target_package, timeout_limit,
-                                        targeted_tests=tests)
+    code, stderr, timed_out = run_maven(probe_id, project_dir, agent_jar, target_package, timeout_limit, targeted_tests=tests)
 
     if timed_out:
         print(f"  - TIMEOUT! Run exceeded {timeout_limit:.2f} seconds.\n  Result: Discarded (Infinite Loop Detected)")
-        return None, True
+        return ["TIMEOUT"], 0, len(tests), True
 
-    outcomes = {k: v.strip().upper() for k, v in read_artifact(project_dir, "test-outcomes.txt")}
+    outcomes = {k: v.strip() for k, v in read_artifact(project_dir, "test-outcomes.txt")}
     if not outcomes:
         print(f"  No outcomes produced:\n{stderr[-1000:]}")
-        return None, False
+        return None, 0, 0, False
 
     actions_map = {}
     for test_id, action in read_artifact(project_dir, "perturbations.txt"):
@@ -118,24 +119,28 @@ def evaluate(probe_id, tests, project_dir, agent_jar, target_package, timeout_li
         if action not in actions_map[test_id]:
             actions_map[test_id].append(action)
 
-    failed = sum(1 for test in tests if outcomes.get(test, "MISSING") not in ("PASS", "MISSING"))
-    passed = sum(1 for test in tests if outcomes.get(test, "MISSING") == "PASS")
+    test_results = []
+    failed_count = 0
+    passed_count = 0
 
     for test in sorted(tests):
         status = outcomes.get(test, 'MISSING')
+        test_results.append(status)
+
         test_actions = actions_map.get(test, [])
         action_str = f"  ({', '.join(test_actions)})" if test_actions else ""
-
         print(f"  - {test}: {status}{action_str}")
 
-    total = failed + passed
-    if total == 0:
-        print("  Score: N/A")
-        return None, False
+        if "FAIL" in status.upper():
+            failed_count += 1
+        elif status.upper() == "PASS":
+            passed_count += 1
 
-    score = failed / total
-    print(f"  Caught Perturbations: {score * 100:.2f}% ({failed}/{total})")
-    return score, False
+    total = failed_count + passed_count
+    if total > 0:
+        print(f"  Tests catching perturbation: {failed_count / total * 100:.2f}% ({failed_count}/{total})")
+
+    return test_results, passed_count, failed_count, False
 
 
 def main():
@@ -149,8 +154,13 @@ def main():
     dynamic_timeout = max(discovery_duration * 2.0, 10.0)
     print(f"Set strict timeout limit for evaluations: {dynamic_timeout:.2f} seconds")
 
-    scores = []
-    timeouts_count = skipped_count = errors_count = 0
+    tier1_survived = 0
+    tier2_error = 0
+    tier3_assert = 0
+
+    timeouts_count = skipped_count = errors_count = unknown_errors = 0
+    global_tests_passed = 0
+    global_tests_failed = 0
 
     for pid, probe_desc in sorted(probes.items()):
         print(f"\nProbe {pid}: {probe_desc}")
@@ -161,34 +171,76 @@ def main():
             skipped_count += 1
             continue
 
-        score, is_timeout = evaluate(pid, tests, project_dir, agent_jar, target_package, dynamic_timeout)
+        test_results, p_count, f_count, is_timeout = evaluate(pid, tests, project_dir, agent_jar, target_package, dynamic_timeout)
 
         if is_timeout:
             timeouts_count += 1
-        elif score is not None:
-            scores.append(score)
+            tier2_error += 1
+            global_tests_failed += f_count
+            continue
+
+        if test_results is not None:
+            global_tests_passed += p_count
+            global_tests_failed += f_count
+
+            has_assert = False
+            has_exception = False
+            has_pass = False
+
+            for status in test_results:
+                s_up = status.upper()
+                if "FAIL" in s_up:
+                    if "ASSERT" in s_up:
+                        has_assert = True
+                    else:
+                        has_exception = True
+                elif "PASS" in s_up:
+                    has_pass = True
+
+            if has_assert:
+                tier3_assert += 1
+            elif has_exception:
+                tier2_error += 1
+            elif has_pass:
+                tier1_survived += 1
+            else:
+                unknown_errors += 1
         else:
             errors_count += 1
 
     total_duration = time.time() - script_start
-    mean_score_str = f"{sum(scores) / len(scores) * 100:.2f}%" if scores else "N/A"
+    total_scored = tier1_survived + tier2_error + tier3_assert
+    total_tests_executed = global_tests_passed + global_tests_failed
+
+    perturbation_score = ((tier2_error + tier3_assert) / total_scored * 100) if total_scored > 0 else 0.0
+    unified_test_fail_rate = (global_tests_failed / total_tests_executed * 100) if total_tests_executed > 0 else 0.0
 
     print(f"""
-        {'=' * 50}
+        {'=' * 60}
                          FINAL ANALYTICS
-        {'=' * 50}
+        {'=' * 60}
         Total Probes Discovered : {len(probes)}
-        Probes Scored           : {len(scores)}
+        Probes Evaluated        : {total_scored}
         Probes Skipped (No Hit) : {skipped_count}
-        Timeouts (Discarded)    : {timeouts_count}
-        Errors (No Outcomes)    : {errors_count}
-        {'-' * 50}
+        Errors (No Outcomes)    : {errors_count + unknown_errors}
+        {'-' * 60}
+        PERTURBATION RESOLUTION TIERS:
+        Tier 1 (PASS)           : {tier1_survived} (Perturbation Survived)
+        Tier 2 (FAIL Exception) : {tier2_error} (Execution Error / Timeout)
+        Tier 3 (FAIL Assert)    : {tier3_assert} (Semantic Failure)
+        {'-' * 60}
+        TEST EXECUTION METRICS:
+        Total Tests Executed    : {total_tests_executed}
+        Tests Passed            : {global_tests_passed}
+        Tests Failed            : {global_tests_failed}
+        Unified Test Fail Rate  : {unified_test_fail_rate:.2f}%
+        {'-' * 60}
         Discovery Runtime       : {discovery_duration:.2f}s
         Evaluation Runtime      : {total_duration - discovery_duration:.2f}s
         Total Script Runtime    : {total_duration:.2f}s
-        {'-' * 50}
-        Mean Perturbation Score : {mean_score_str}
-        {'=' * 50}
+        {'-' * 60}
+        Overall Perturbation Score : {perturbation_score:.2f}% (Tiers 2 & 3)
+        {'=' * 60}
         """)
 
 
