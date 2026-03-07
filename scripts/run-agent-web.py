@@ -6,6 +6,7 @@ import signal
 import webbrowser
 import re
 import json
+import html as _html
 from collections import defaultdict
 
 OUT_DIR = "target/perturb"
@@ -46,18 +47,19 @@ def run_maven(probe_id, project_dir, agent_jar, target_package, timeout_limit=No
         process = subprocess.Popen(
             command, cwd=project_dir,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            preexec_fn=os.setsid
+            start_new_session=True
         )
         _, stderr = process.communicate(timeout=timeout_limit)
         return process.returncode, stderr, False
 
     except subprocess.TimeoutExpired:
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        process.communicate()
         return -1, "PROCESS TIMED OUT", True
 
 
 def unescape(text):
-    return text.replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t").replace("\\\\", "\\")
+    return text.replace("\\\\", "\\").replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t")
 
 
 def read_artifact(project_dir, filename):
@@ -89,7 +91,7 @@ def read_java_file(project_dir, fqcn, is_test=False):
     if not path or not os.path.exists(path):
         return f"// Source file not found: {path}"
     try:
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, encoding='utf-8') as f:
             return f.read()
     except Exception as e:
         return f"// Error reading file: {str(e)}"
@@ -213,7 +215,7 @@ def sanitize_id(text):
 
 
 def escape_html(text):
-    return text.replace('<', '&lt;').replace('>', '&gt;')
+    return _html.escape(str(text))
 
 
 def escape_js(text):
@@ -244,13 +246,17 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             needed_files.add((stats['fqcn'], False))
 
     for fqcn, is_test in needed_files:
-        file_cache[fqcn] = read_java_file(project_dir, fqcn, is_test)
+        file_cache[(fqcn, is_test)] = read_java_file(project_dir, fqcn, is_test)
 
-    file_cache_json = json.dumps(file_cache).replace("</", "<\\/")
+    serialisable_cache = {}
+    for (fqcn, is_test), content in file_cache.items():
+        if is_test or fqcn not in serialisable_cache:
+            serialisable_cache[fqcn] = content
+    for (fqcn, is_test), content in file_cache.items():
+        if not is_test:
+            serialisable_cache[fqcn] = content
+    file_cache_json = json.dumps(serialisable_cache).replace("</", "<\\/")
 
-    # ---------------------------------------------------------
-    # HTML Builders for Ledger (Probe-Centric - Tab 3)
-    # ---------------------------------------------------------
     def build_ledger_row(p):
         class_name = p['fqcn'].split('.')[-1] if p['fqcn'] != 'unknown' else 'Unknown'
 
@@ -372,9 +378,6 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
     </div>
     """
 
-    # ---------------------------------------------------------
-    # Generate Test-Centric Rows (Tab 1)
-    # ---------------------------------------------------------
     valid_sorted_tests = []
 
     for test_name, stats in sorted(test_stats.items(), key=lambda x: (x[1]['hit'] - x[1]['caught'], x[1]['hit']),
@@ -383,7 +386,6 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
         t3 = []
         t_covered = []
 
-        # Strictly filter out Tier 2
         for p in stats['probes']:
             if p['tier'] == 3:
                 t3.append(p)
@@ -395,7 +397,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
 
         semantic_hits = len(t1) + len(t3) + len(t_covered)
         if semantic_hits == 0:
-            continue  # Skip tests that only hit exceptions
+            continue
 
         valid_sorted_tests.append((test_name, stats, t1, t3, t_covered, semantic_hits))
 
@@ -424,7 +426,6 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
 
         inner_html = f"<div class='test-details'>"
 
-        # 1. Survived (Tier 1)
         if t1:
             inner_html += f"""
             <div class='details-section'>
@@ -464,7 +465,6 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                         """
             inner_html += "</ul></div></div>"
 
-        # 3. Action Required (Cascaded)
         inner_html += f"""
         <div class='details-section' id='cascaded-section-{safe_id}' style='display: none;'>
             <div class='details-title text-orange accordion-header' onclick="toggleAccordion('content-cascaded-{safe_id}', 'icon-cascaded-{safe_id}')">
@@ -476,7 +476,6 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
         </div>
         """
 
-        # 4. Covered by Another Test
         if t_covered:
             inner_html += f"""
             <div class='details-section'>
@@ -514,7 +513,6 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                         """
             inner_html += "</ul></div></div>"
 
-        # 5. Semantic Failures
         if t3:
             inner_html += f"""
             <div class='details-section'>
@@ -545,7 +543,6 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                         """
             inner_html += "</ul></div></div>"
 
-        # 6. Filtered Noise Archive
         inner_html += f"""
         <div class='details-section' id='noise-section-{safe_id}' style='display: none;'>
             <div class='details-title text-muted accordion-header' onclick="toggleAccordion('content-noise-{safe_id}', 'icon-noise-{safe_id}')">
@@ -574,9 +571,6 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
         </tr>
         """
 
-    # ---------------------------------------------------------
-    # Generate Code-Centric Rows (Tab 2)
-    # ---------------------------------------------------------
     code_rows = ""
     valid_methods_count = 0
     total_t2_unreviewed = 0
@@ -624,7 +618,6 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             """
         inner_code_html += "</ul></div></div>"
 
-        # Code-Centric Archive
         inner_code_html += f"""
         <div class='details-section' id='code-noise-section-{safe_m_id}' style='display: none;'>
             <div class='details-title text-muted accordion-header' onclick="toggleAccordion('content-code-noise-{safe_m_id}', 'icon-code-noise-{safe_m_id}')">
@@ -1392,152 +1385,148 @@ def main():
     os.makedirs(target, exist_ok=True)
     log_path = os.path.join(target, "execution.log")
     log_file = open(log_path, "w", encoding="utf-8")
+    try:
+        probes, hits, discovery_duration = discovery(project_dir, agent_jar, target_package, log_file)
+        dynamic_timeout = max(discovery_duration * 2.0, 10.0)
+        log_file.write(f"Set strict timeout limit for evaluations: {dynamic_timeout:.2f} seconds\n")
 
-    probes, hits, discovery_duration = discovery(project_dir, agent_jar, target_package, log_file)
-    dynamic_timeout = max(discovery_duration * 2.0, 10.0)
-    log_file.write(f"Set strict timeout limit for evaluations: {dynamic_timeout:.2f} seconds\n")
+        tier1_survived = 0
+        tier2_error = 0
+        tier3_assert = 0
+        timeouts_count = skipped_count = errors_count = unknown_errors = 0
+        global_tests_passed = 0
+        global_tests_failed = 0
 
-    tier1_survived = 0
-    tier2_error = 0
-    tier3_assert = 0
-    timeouts_count = skipped_count = errors_count = unknown_errors = 0
-    global_tests_passed = 0
-    global_tests_failed = 0
+        dashboard_tests = defaultdict(lambda: {'hit': 0, 'caught': 0, 'probes': []})
+        dashboard_methods = defaultdict(lambda: {'fqcn': '', 'method': '', 'tests': set(), 'probes': []})
+        dashboard_ledger = []
 
-    dashboard_tests = defaultdict(lambda: {'hit': 0, 'caught': 0, 'probes': []})
-    dashboard_methods = defaultdict(lambda: {'fqcn': '', 'method': '', 'tests': set(), 'probes': []})
-    dashboard_ledger = []
+        global_tier3_probes = {}
 
-    global_tier3_probes = {}
+        total_probes = len(probes)
+        current_probe_idx = 0
 
-    total_probes = len(probes)
-    current_probe_idx = 0
+        for pid, probe_desc in sorted(probes.items()):
+            current_probe_idx += 1
+            print(f"({current_probe_idx}/{total_probes}) Probe {pid}: {probe_desc}")
+            log_file.write(f"\nProbe {pid}: {probe_desc}\n")
 
-    for pid, probe_desc in sorted(probes.items()):
-        current_probe_idx += 1
-        print(f"({current_probe_idx}/{total_probes}) Probe {pid}: {probe_desc}")
-        log_file.write(f"\nProbe {pid}: {probe_desc}\n")
+            tests = hits.get(pid)
 
-        tests = hits.get(pid)
+            if not tests:
+                log_file.write("  SKIP: No tests hit this probe\n")
+                skipped_count += 1
+                continue
 
-        if not tests:
-            log_file.write("  SKIP: No tests hit this probe\n")
-            skipped_count += 1
-            continue
+            sorted_tests = sorted(tests)
+            mod, fqcn, m_name = parse_probe(probe_desc)
 
-        mod, fqcn, m_name = parse_probe(probe_desc)
+            test_results_dict, p_count, f_count, is_timeout, actions_map = evaluate(pid, tests, project_dir, agent_jar,
+                                                                                    target_package, dynamic_timeout,
+                                                                                    log_file)
 
-        test_results_dict, p_count, f_count, is_timeout, actions_map = evaluate(pid, tests, project_dir, agent_jar,
-                                                                                target_package, dynamic_timeout,
-                                                                                log_file)
+            for t in tests:
+                dashboard_tests[t]['hit'] += 1
 
-        for t in tests:
-            dashboard_tests[t]['hit'] += 1
+            best_tier = 1
 
-        best_tier = 1
-
-        if is_timeout:
-            timeouts_count += 1
-            tier2_error += 1
-            global_tests_failed += len(tests)
-            best_tier = 2
-
-            method_key = f"{fqcn}#{m_name}"
-            dashboard_methods[method_key]['fqcn'] = fqcn
-            dashboard_methods[method_key]['method'] = m_name
-            dashboard_methods[method_key]['tests'].update(tests)
-            dashboard_methods[method_key]['probes'].append({
-                'id': pid, 'desc': probe_desc, 'tests': sorted(list(tests)), 'status': 'FAIL (TIMEOUT)',
-                'actions': ['Infinite Loop / Timeout'], 'exceptions': ['TIMEOUT: Execution exceeded time limit']
-            })
-        elif test_results_dict:
-            global_tests_passed += p_count
-            global_tests_failed += f_count
-
-            has_assert = False
-            has_exception = False
-            has_pass = False
-
-            # Keep track of exceptions caused by this specific probe across multiple tests
-            probe_exceptions = set()
-
-            for t_name, status in test_results_dict.items():
-                s_up = status.upper()
-                t_tier = 1
-
-                if "FAIL" in s_up:
-                    if "ASSERT" in s_up or "COMPARISON" in s_up or "MULTIPLEFAILURES" in s_up:
-                        has_assert = True
-                        t_tier = 3
-                        dashboard_tests[t_name]['caught'] += 1
-                        if pid not in global_tier3_probes:
-                            global_tier3_probes[pid] = t_name
-                    else:
-                        has_exception = True
-                        t_tier = 2
-
-                        # Clean up "FAIL (java.lang.NullPointerException)" to just the exception
-                        clean_exc = status.replace("FAIL (", "").rstrip(")") if status.startswith("FAIL (") else status
-                        probe_exceptions.add(clean_exc)
-
-                elif "PASS" in s_up:
-                    has_pass = True
-
-                t_actions = actions_map.get(t_name, [])
-
-                # Exclude Tier 2 from Tab 1 Inbox
-                if t_tier != 2:
-                    dashboard_tests[t_name]['probes'].append({
-                        'id': pid, 'desc': probe_desc, 'status': status, 'tier': t_tier, 'actions': t_actions
-                    })
-
-            if has_assert:
-                tier3_assert += 1
-                best_tier = 3
-            elif has_exception:
+            if is_timeout:
+                timeouts_count += 1
                 tier2_error += 1
+                global_tests_failed += len(tests)
                 best_tier = 2
 
                 method_key = f"{fqcn}#{m_name}"
                 dashboard_methods[method_key]['fqcn'] = fqcn
                 dashboard_methods[method_key]['method'] = m_name
                 dashboard_methods[method_key]['tests'].update(tests)
-
-                # Fetch actions for the first test as a representative trace
-                rep_test = sorted(list(tests))[0] if tests else None
-                rep_actions = actions_map.get(rep_test, []) if rep_test else []
-
                 dashboard_methods[method_key]['probes'].append({
-                    'id': pid, 'desc': probe_desc, 'tests': sorted(list(tests)), 'actions': rep_actions,
-                    'exceptions': sorted(list(probe_exceptions))
+                    'id': pid, 'desc': probe_desc, 'tests': sorted_tests, 'status': 'FAIL (TIMEOUT)',
+                    'actions': ['Infinite Loop / Timeout'], 'exceptions': ['TIMEOUT: Execution exceeded time limit']
                 })
-            elif has_pass:
-                tier1_survived += 1
-                best_tier = 1
+            elif test_results_dict:
+                global_tests_passed += p_count
+                global_tests_failed += f_count
+
+                has_assert = False
+                has_exception = False
+                has_pass = False
+
+                probe_exceptions = set()
+
+                for t_name, status in test_results_dict.items():
+                    s_up = status.upper()
+                    t_tier = 1
+
+                    if "FAIL" in s_up:
+                        if "ASSERT" in s_up or "COMPARISON" in s_up or "MULTIPLEFAILURES" in s_up:
+                            has_assert = True
+                            t_tier = 3
+                            dashboard_tests[t_name]['caught'] += 1
+                            if pid not in global_tier3_probes:
+                                global_tier3_probes[pid] = t_name
+                        else:
+                            has_exception = True
+                            t_tier = 2
+
+                            clean_exc = status.replace("FAIL (", "").rstrip(")") if status.startswith("FAIL (") else status
+                            probe_exceptions.add(clean_exc)
+
+                    elif "PASS" in s_up:
+                        has_pass = True
+
+                    t_actions = actions_map.get(t_name, [])
+
+                    if t_tier != 2:
+                        dashboard_tests[t_name]['probes'].append({
+                            'id': pid, 'desc': probe_desc, 'status': status, 'tier': t_tier, 'actions': t_actions
+                        })
+
+                if has_assert:
+                    tier3_assert += 1
+                    best_tier = 3
+                elif has_exception:
+                    tier2_error += 1
+                    best_tier = 2
+
+                    method_key = f"{fqcn}#{m_name}"
+                    dashboard_methods[method_key]['fqcn'] = fqcn
+                    dashboard_methods[method_key]['method'] = m_name
+                    dashboard_methods[method_key]['tests'].update(tests)
+
+                    rep_actions = actions_map.get(sorted_tests[0], []) if sorted_tests else []
+
+                    dashboard_methods[method_key]['probes'].append({
+                        'id': pid, 'desc': probe_desc, 'tests': sorted_tests, 'actions': rep_actions,
+                        'exceptions': sorted(list(probe_exceptions))
+                    })
+                elif has_pass:
+                    tier1_survived += 1
+                    best_tier = 1
+                else:
+                    unknown_errors += 1
             else:
-                unknown_errors += 1
-        else:
-            errors_count += 1
+                errors_count += 1
 
-        if not is_timeout and test_results_dict and best_tier != 2:
-            dashboard_ledger.append({
-                'id': pid,
-                'desc': probe_desc,
-                'fqcn': fqcn,
-                'method': m_name,
-                'tests': sorted(list(tests)),
-                'tier': best_tier
-            })
+            if not is_timeout and test_results_dict and best_tier != 2:
+                dashboard_ledger.append({
+                    'id': pid,
+                    'desc': probe_desc,
+                    'fqcn': fqcn,
+                    'method': m_name,
+                    'tests': sorted_tests,
+                    'tier': best_tier
+                })
 
-    total_duration = time.time() - script_start
-    total_scored = tier1_survived + tier2_error + tier3_assert
-    total_tests_executed = global_tests_passed + global_tests_failed
+        total_duration = time.time() - script_start
+        total_scored = tier1_survived + tier2_error + tier3_assert
+        total_tests_executed = global_tests_passed + global_tests_failed
 
-    perturbation_score = ((tier2_error + tier3_assert) / total_scored * 100) if total_scored > 0 else 0.0
-    clean_kill_ratio = (tier3_assert / total_scored * 100) if total_scored > 0 else 0.0
-    unified_test_fail_rate = (global_tests_failed / total_tests_executed * 100) if total_tests_executed > 0 else 0.0
+        perturbation_score = ((tier2_error + tier3_assert) / total_scored * 100) if total_scored > 0 else 0.0
+        clean_kill_ratio = (tier3_assert / total_scored * 100) if total_scored > 0 else 0.0
+        unified_test_fail_rate = (global_tests_failed / total_tests_executed * 100) if total_tests_executed > 0 else 0.0
 
-    analytics_text = f"""
+        analytics_text = f"""
         {'=' * 60}
                          FINAL ANALYTICS
         {'=' * 60}
@@ -1561,23 +1550,23 @@ def main():
         Clean Kill Ratio           : {clean_kill_ratio:.2f}% (Tier 3 only)
         {'=' * 60}
         """
-    log_file.write(analytics_text + "\n")
+        log_file.write(analytics_text + "\n")
 
-    metrics = {
-        'score': perturbation_score,
-        'clean_kill': clean_kill_ratio,
-        'fail_rate': unified_test_fail_rate,
-        'evaluated': total_scored,
-        'brittle': tier2_error
-    }
+        metrics = {
+            'score': perturbation_score,
+            'clean_kill': clean_kill_ratio,
+            'fail_rate': unified_test_fail_rate,
+            'evaluated': total_scored,
+            'brittle': tier2_error
+        }
 
-    html_file = generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, dashboard_tests, metrics,
-                                   global_tier3_probes)
+        html_file = generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, dashboard_tests, metrics,
+                                       global_tier3_probes)
 
-    log_file.write(f"\nDashboard generated at: {html_file}\n")
-    print(f"\nDashboard generated at: {html_file}")
-
-    log_file.close()
+        log_file.write(f"\nDashboard generated at: {html_file}\n")
+        print(f"\nDashboard generated at: {html_file}")
+    finally:
+        log_file.close()
 
     webbrowser.open('file://' + os.path.realpath(html_file))
 
