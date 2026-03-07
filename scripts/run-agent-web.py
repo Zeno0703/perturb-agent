@@ -95,13 +95,14 @@ def read_java_file(project_dir, fqcn, is_test=False):
         return f"// Error reading file: {str(e)}"
 
 
-def discovery(project_dir, agent_jar, target_package):
+def discovery(project_dir, agent_jar, target_package, log_file):
     print("Running Discovery Phase...")
+    log_file.write("Running Discovery Phase...\n")
     start_time = time.time()
 
     code, stderr, _ = run_maven(-1, project_dir, agent_jar, target_package)
     discovery_duration = time.time() - start_time
-    print(f"Discovery finished in {discovery_duration:.2f} seconds.")
+    log_file.write(f"Discovery finished in {discovery_duration:.2f} seconds.\n")
 
     if code != 0:
         sys.exit(f"Discovery failed:\n{stderr[-1000:]}")
@@ -117,17 +118,18 @@ def discovery(project_dir, agent_jar, target_package):
     return probes, hits, discovery_duration
 
 
-def evaluate(probe_id, tests, project_dir, agent_jar, target_package, timeout_limit):
+def evaluate(probe_id, tests, project_dir, agent_jar, target_package, timeout_limit, log_file):
     code, stderr, timed_out = run_maven(probe_id, project_dir, agent_jar, target_package, timeout_limit,
                                         targeted_tests=tests)
 
     if timed_out:
-        print(f"  - TIMEOUT! Run exceeded {timeout_limit:.2f} seconds.\n  Result: Discarded (Infinite Loop Detected)")
+        log_file.write(
+            f"  - TIMEOUT! Run exceeded {timeout_limit:.2f} seconds.\n  Result: Discarded (Infinite Loop Detected)\n")
         return {t: "FAIL (TIMEOUT)" for t in tests}, 0, len(tests), True, {}
 
     outcomes = {k: v.strip() for k, v in read_artifact(project_dir, "test-outcomes.txt")}
     if not outcomes:
-        print(f"  No outcomes produced:\n{stderr[-1000:]}")
+        log_file.write(f"  No outcomes produced:\n{stderr[-1000:]}\n")
         return None, 0, 0, False, {}
 
     actions_map = defaultdict(list)
@@ -144,7 +146,7 @@ def evaluate(probe_id, tests, project_dir, agent_jar, target_package, timeout_li
 
         test_actions = actions_map.get(test, [])
         action_str = f"  ({', '.join(test_actions)})" if test_actions else ""
-        print(f"  - {test}: {status}{action_str}")
+        log_file.write(f"  - {test}: {status}{action_str}\n")
 
         if "FAIL" in status.upper():
             failed_count += 1
@@ -153,7 +155,7 @@ def evaluate(probe_id, tests, project_dir, agent_jar, target_package, timeout_li
 
     total = failed_count + passed_count
     if total > 0:
-        print(f"  Tests catching perturbation: {failed_count / total * 100:.2f}% ({failed_count}/{total})")
+        log_file.write(f"  Tests catching perturbation: {failed_count / total * 100:.2f}% ({failed_count}/{total})\n")
 
     return test_results_dict, passed_count, failed_count, False, actions_map
 
@@ -596,7 +598,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             witness_list = ", ".join(p['tests'])
             action_disp = build_action_trace(p)
             inner_code_html += f"""
-            <li id='code-probe-{p['id']}' class='probe-item' style='border-left-color: var(--warning);'>
+            <li id='code-probe-{p['id']}' data-state='unreviewed' class='probe-item' style='border-left-color: var(--warning);'>
                 <div class='probe-meta'>
                     <span class='probe-id'>Probe {p['id']}</span>
                     <div class='action-group'>
@@ -1061,7 +1063,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                 }}
 
                 // Update Code Global Metrics
-                const t2UnreviewedGlobal = document.querySelectorAll('#code-view li.probe-item:not([data-state])').length;
+                const t2UnreviewedGlobal = document.querySelectorAll('#code-view li.probe-item[data-state="unreviewed"]').length;
                 const t2ActionGlobal = document.querySelectorAll('#code-view li.probe-item[data-state="action-code"]').length;
                 const t2NoiseGlobal = document.querySelectorAll('#code-view li.probe-item[data-state="equivalent-code"]').length;
                 const fullyTriagedGlobal = document.querySelectorAll('#code-view .status-pill.clear, #code-view .status-pill.action').length;
@@ -1135,9 +1137,9 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             }}
 
             function updateGlobalMetrics() {{
-                const t1Unreviewed = document.querySelectorAll('#test-view li[data-tier="1"]:not([data-state])').length;
-                const confirmedBugs = document.querySelectorAll('#test-view .tag-action, #test-view .tag-cascaded').length;
-                const noiseBugs = document.querySelectorAll('#test-view li.noise-item[data-state="equivalent"]').length;
+                const t1Unreviewed = document.querySelectorAll('#test-view li[data-tier="1"][data-state="unreviewed"]').length;
+                const confirmedBugs = document.querySelectorAll('#test-view li[data-state="action"]').length;
+                const noiseBugs = document.querySelectorAll('#test-view li[data-state="equivalent"], #test-view li[data-state="noise"]').length;
                 const fullyTriaged = document.querySelectorAll('#test-view .status-pill.clear, #test-view .status-pill.action').length;
 
                 const inboxEl = document.getElementById('ui-t1-inbox');
@@ -1380,9 +1382,14 @@ def main():
     script_start = time.time()
     project_dir, agent_jar, target_package = sys.argv[1:4]
 
-    probes, hits, discovery_duration = discovery(project_dir, agent_jar, target_package)
+    target = os.path.join(project_dir, OUT_DIR)
+    os.makedirs(target, exist_ok=True)
+    log_path = os.path.join(target, "execution.log")
+    log_file = open(log_path, "w", encoding="utf-8")
+
+    probes, hits, discovery_duration = discovery(project_dir, agent_jar, target_package, log_file)
     dynamic_timeout = max(discovery_duration * 2.0, 10.0)
-    print(f"Set strict timeout limit for evaluations: {dynamic_timeout:.2f} seconds")
+    log_file.write(f"Set strict timeout limit for evaluations: {dynamic_timeout:.2f} seconds\n")
 
     tier1_survived = 0
     tier2_error = 0
@@ -1397,19 +1404,26 @@ def main():
 
     global_tier3_probes = {}
 
+    total_probes = len(probes)
+    current_probe_idx = 0
+
     for pid, probe_desc in sorted(probes.items()):
-        print(f"\nProbe {pid}: {probe_desc}")
+        current_probe_idx += 1
+        print(f"({current_probe_idx}/{total_probes}) Probe {pid}: {probe_desc}")
+        log_file.write(f"\nProbe {pid}: {probe_desc}\n")
+
         tests = hits.get(pid)
 
         if not tests:
-            print("  SKIP: No tests hit this probe")
+            log_file.write("  SKIP: No tests hit this probe\n")
             skipped_count += 1
             continue
 
         mod, fqcn, m_name = parse_probe(probe_desc)
 
         test_results_dict, p_count, f_count, is_timeout, actions_map = evaluate(pid, tests, project_dir, agent_jar,
-                                                                                target_package, dynamic_timeout)
+                                                                                target_package, dynamic_timeout,
+                                                                                log_file)
 
         for t in tests:
             dashboard_tests[t]['hit'] += 1
@@ -1508,7 +1522,7 @@ def main():
     clean_kill_ratio = (tier3_assert / total_scored * 100) if total_scored > 0 else 0.0
     unified_test_fail_rate = (global_tests_failed / total_tests_executed * 100) if total_tests_executed > 0 else 0.0
 
-    print(f"""
+    analytics_text = f"""
         {'=' * 60}
                          FINAL ANALYTICS
         {'=' * 60}
@@ -1531,7 +1545,8 @@ def main():
         Overall Perturbation Score : {perturbation_score:.2f}% (Tiers 2 & 3)
         Clean Kill Ratio           : {clean_kill_ratio:.2f}% (Tier 3 only)
         {'=' * 60}
-        """)
+        """
+    log_file.write(analytics_text + "\n")
 
     metrics = {
         'score': perturbation_score,
@@ -1543,7 +1558,11 @@ def main():
 
     html_file = generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, dashboard_tests, metrics,
                                    global_tier3_probes)
+
+    log_file.write(f"\nDashboard generated at: {html_file}\n")
     print(f"\nDashboard generated at: {html_file}")
+
+    log_file.close()
 
     webbrowser.open('file://' + os.path.realpath(html_file))
 
