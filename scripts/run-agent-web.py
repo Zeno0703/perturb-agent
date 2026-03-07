@@ -234,15 +234,12 @@ def generate_dashboard(project_dir, dashboard_ledger, test_stats, metrics, globa
     for fqcn, is_test in needed_files:
         file_cache[fqcn] = read_java_file(project_dir, fqcn, is_test)
 
-    # Safely dump cache to JSON and prevent HTML script tag breakage
     file_cache_json = json.dumps(file_cache).replace("</", "<\\/")
 
     # ---------------------------------------------------------
-    # Generate Probe-Centric (Ledger) Rows
+    # Generate Probe-Centric (Ledger) Rows via Accordions + Tables
     # ---------------------------------------------------------
-    ledger_rows = ""
-    for p in sorted(dashboard_ledger, key=lambda x: (x['tier'], -len(x['tests']))):
-        safe_id = sanitize_id(f"ledger_{p['id']}")
+    def build_ledger_row(p):
         class_name = p['fqcn'].split('.')[-1] if p['fqcn'] != 'unknown' else 'Unknown'
 
         if p['tier'] == 1:
@@ -258,15 +255,15 @@ def generate_dashboard(project_dir, dashboard_ledger, test_stats, metrics, globa
         witness_list = "".join([f"<li style='margin-bottom: 4px;'>{escape_html(t)}</li>" for t in p['tests']])
         ide_link = to_idea_link(project_dir, p['fqcn'], False)
 
-        ledger_rows += f"""
-        <tr class="clickable-row" onclick="toggleRow(event, 'ledger-desc-{safe_id}')">
+        return f"""
+        <tr id='ledger-row-{p['id']}' class="clickable-row" onclick="toggleRow(event, 'ledger-desc-{p['id']}')">
             <td class="font-medium code-font">#{p['id']}</td>
             <td class="code-font">{class_name}.{p['method']}()</td>
-            <td><div class="scrollable-text">{escape_html(p['desc'])}</div></td>
+            <td><div class="scrollable-text" style="max-width: 25vw;">{escape_html(p['desc'])}</div></td>
             <td class="text-center">{len(p['tests'])} Tests</td>
             <td class="text-right"><span id="ledger-badge-{p['id']}" class="badge {badge_class}">{status_text}</span></td>
         </tr>
-        <tr id="ledger-desc-{safe_id}" class="details-row" style="display: none;">
+        <tr id="ledger-desc-{p['id']}" class="details-row" style="display: none;">
             <td colspan="5" class="p-0">
                 <div class="test-details">
                     <div style="display: flex; gap: 24px; margin-bottom: 0;">
@@ -285,6 +282,90 @@ def generate_dashboard(project_dir, dashboard_ledger, test_stats, metrics, globa
                 </div>
             </td>
         </tr>
+        """
+
+    def build_ledger_table(rows_html, tbody_id):
+        return f"""
+        <div class="table-container" style="margin-top: 16px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">Probe ID</th>
+                        <th style="width: 250px;">Target Location</th>
+                        <th>The Mutation</th>
+                        <th class="text-center" style="width: 120px;">Footprint</th>
+                        <th class="text-right" style="width: 180px;">Global Status</th>
+                    </tr>
+                </thead>
+                <tbody id="{tbody_id}">
+                    {rows_html}
+                </tbody>
+            </table>
+        </div>
+        """
+
+    ledger_t1 = []
+    ledger_t2 = []
+    ledger_t3 = []
+
+    for p in sorted(dashboard_ledger, key=lambda x: -len(x['tests'])):
+        if p['tier'] == 1:
+            ledger_t1.append(p)
+        elif p['tier'] == 2:
+            ledger_t2.append(p)
+        elif p['tier'] == 3:
+            ledger_t3.append(p)
+
+    ledger_html = ""
+
+    if ledger_t1:
+        rows_html = "".join([build_ledger_row(p) for p in ledger_t1])
+        ledger_html += f"""
+        <div class='details-section'>
+            <div class='details-title text-danger accordion-header' onclick="toggleAccordion('content-ledger-t1', 'icon-ledger-t1')">
+                <span><span id='icon-ledger-t1' class='accordion-icon'>▼</span> Globally Unprotected (Critical) <span id='count-ledger-t1'>[{len(ledger_t1)} Probes]</span></span>
+            </div>
+            <div id='content-ledger-t1' style='display: block;'>
+                {build_ledger_table(rows_html, 'tbody-ledger-t1')}
+            </div>
+        </div>
+        """
+
+    ledger_html += f"""
+    <div class='details-section' id='section-ledger-pending' style='display: none;'>
+        <div class='details-title text-primary accordion-header' onclick="toggleAccordion('content-ledger-pending', 'icon-ledger-pending')">
+            <span><span id='icon-ledger-pending' class='accordion-icon'>▼</span> Pending Fix (Claimed in Test View) <span id='count-ledger-pending'>[0 Probes]</span></span>
+        </div>
+        <div id='content-ledger-pending' style='display: block;'>
+            {build_ledger_table('', 'tbody-ledger-pending')}
+        </div>
+    </div>
+    """
+
+    if ledger_t2:
+        rows_html = "".join([build_ledger_row(p) for p in ledger_t2])
+        ledger_html += f"""
+        <div class='details-section'>
+            <div class='details-title text-warning accordion-header' onclick="toggleAccordion('content-ledger-t2', 'icon-ledger-t2')">
+                <span><span id='icon-ledger-t2' class='accordion-icon'>▶</span> Execution Crashes (Dirty Kills) <span id='count-ledger-t2'>[{len(ledger_t2)} Probes]</span></span>
+            </div>
+            <div id='content-ledger-t2' style='display: none;'>
+                {build_ledger_table(rows_html, 'tbody-ledger-t2')}
+            </div>
+        </div>
+        """
+
+    if ledger_t3:
+        rows_html = "".join([build_ledger_row(p) for p in ledger_t3])
+        ledger_html += f"""
+        <div class='details-section'>
+            <div class='details-title text-success accordion-header' onclick="toggleAccordion('content-ledger-t3', 'icon-ledger-t3')">
+                <span><span id='icon-ledger-t3' class='accordion-icon'>▶</span> Globally Caught (Secured) <span id='count-ledger-t3'>[{len(ledger_t3)} Probes]</span></span>
+            </div>
+            <div id='content-ledger-t3' style='display: none;'>
+                {build_ledger_table(rows_html, 'tbody-ledger-t3')}
+            </div>
+        </div>
         """
 
     # ---------------------------------------------------------
@@ -423,7 +504,7 @@ def generate_dashboard(project_dir, dashboard_ledger, test_stats, metrics, globa
         # 3. Action Required (Cascaded)
         inner_html += f"""
         <div class='details-section' id='cascaded-section-{safe_id}' style='display: none;'>
-            <div class='details-title text-orange accordion-header' style='border-bottom-color: #fdba74;' onclick="toggleAccordion('content-cascaded-{safe_id}', 'icon-cascaded-{safe_id}')">
+            <div class='details-title text-orange accordion-header' onclick="toggleAccordion('content-cascaded-{safe_id}', 'icon-cascaded-{safe_id}')">
                 <span><span id='icon-cascaded-{safe_id}' class='accordion-icon'>▶</span> Action Required (Identified in Another Test) <span id='count-cascaded-{safe_id}'>[0 Probes]</span></span>
             </div>
             <div id='content-cascaded-{safe_id}' style='display: none;'>
@@ -613,12 +694,14 @@ def generate_dashboard(project_dir, dashboard_ledger, test_stats, metrics, globa
             .badge-warning {{ background-color: var(--warning-bg); color: var(--warning-text); }}
             .badge-success {{ background-color: var(--success-bg); color: var(--success-text); }}
             .badge-primary {{ background-color: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }}
-            .text-danger {{ color: var(--danger); }}
-            .text-warning {{ color: var(--warning); }}
-            .text-success {{ color: var(--success); }}
-            .text-info {{ color: var(--info); }}
-            .text-orange {{ color: var(--orange); }}
-            .text-muted {{ color: var(--text-muted); }}
+
+            .text-danger {{ color: var(--danger) !important; border-bottom-color: var(--danger) !important; }}
+            .text-warning {{ color: var(--warning) !important; border-bottom-color: var(--warning) !important; }}
+            .text-success {{ color: var(--success) !important; border-bottom-color: var(--success) !important; }}
+            .text-info {{ color: var(--info) !important; border-bottom-color: var(--info) !important; }}
+            .text-orange {{ color: var(--orange) !important; border-bottom-color: var(--orange) !important; }}
+            .text-muted {{ color: var(--text-muted) !important; border-bottom-color: var(--text-muted) !important; }}
+            .text-primary {{ color: var(--primary) !important; border-bottom-color: var(--primary) !important; }}
             .text-main {{ color: var(--text-main); }}
 
             .clickable-row {{ cursor: pointer; transition: background-color 0.2s; }}
@@ -631,7 +714,7 @@ def generate_dashboard(project_dir, dashboard_ledger, test_stats, metrics, globa
 
             .details-section {{ margin-bottom: 32px; }}
             .details-section:last-child {{ margin-bottom: 0; }}
-            .details-title {{ font-size: 14px; font-weight: 700; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }}
+            .details-title {{ font-size: 14px; font-weight: 700; border-bottom: 2px solid; padding-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }}
 
             .accordion-header {{ cursor: pointer; user-select: none; transition: opacity 0.2s; display: flex; align-items: center; }}
             .accordion-header:hover {{ opacity: 0.7; }}
@@ -782,11 +865,24 @@ def generate_dashboard(project_dir, dashboard_ledger, test_stats, metrics, globa
                         }}
                     }});
 
-                    // CROSS-TAB SYNC: Update the Vulnerability Ledger
-                    const ledgerBadge = document.getElementById(`ledger-badge-${{probeId}}`);
-                    if (ledgerBadge) {{
-                        ledgerBadge.className = 'badge badge-primary';
-                        ledgerBadge.innerText = 'Pending Fix (Claimed)';
+                    // CROSS-TAB SYNC: Move the item to "Pending Fix" in the Vulnerability Ledger
+                    const ledgerRow = document.getElementById(`ledger-row-${{probeId}}`);
+                    const ledgerDesc = document.getElementById(`ledger-desc-${{probeId}}`);
+                    if (ledgerRow && ledgerDesc) {{
+                        const pendingTbody = document.getElementById('tbody-ledger-pending');
+                        const pendingSection = document.getElementById('section-ledger-pending');
+                        if (pendingTbody && pendingSection) {{
+                            pendingSection.style.display = 'block';
+                            pendingTbody.appendChild(ledgerRow);
+                            pendingTbody.appendChild(ledgerDesc);
+
+                            const ledgerBadge = document.getElementById(`ledger-badge-${{probeId}}`);
+                            if (ledgerBadge) {{
+                                ledgerBadge.className = 'badge badge-primary';
+                                ledgerBadge.innerText = 'Pending Fix (Claimed)';
+                            }}
+                            updateLedgerCounts();
+                        }}
                     }}
 
                 }} else if (decisionType === 'noise') {{
@@ -799,6 +895,18 @@ def generate_dashboard(project_dir, dashboard_ledger, test_stats, metrics, globa
 
                 updateBadge(testId);
                 updateAccordionCounts(testId);
+            }}
+
+            function updateLedgerCounts() {{
+                const sections = ['t1', 't2', 't3', 'pending'];
+                sections.forEach(sec => {{
+                    const tbody = document.getElementById(`tbody-ledger-${{sec}}`);
+                    const countSpan = document.getElementById(`count-ledger-${{sec}}`);
+                    if (tbody && countSpan) {{
+                        const count = tbody.children.length / 2; // Each probe has 2 TRs (main + desc)
+                        countSpan.innerText = `[${{count}} Probes]`;
+                    }}
+                }});
             }}
 
             function updateAccordionCounts(testId) {{
@@ -957,21 +1065,8 @@ def generate_dashboard(project_dir, dashboard_ledger, test_stats, metrics, globa
                     <h2>Vulnerability Ledger (Probe-Centric)</h2>
                     <p>The global status of every injected fault. Discover completely unprotected probes to write brand new unit tests.</p>
                 </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th style="width: 100px;">Probe ID</th>
-                                <th style="width: 250px;">Target Location</th>
-                                <th>The Mutation</th>
-                                <th class="text-center" style="width: 120px;">Footprint</th>
-                                <th class="text-right" style="width: 180px;">Global Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {ledger_rows}
-                        </tbody>
-                    </table>
+                <div class="test-details" style="padding: 16px 0;">
+                    {ledger_html}
                 </div>
             </div>
 
