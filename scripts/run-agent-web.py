@@ -444,9 +444,9 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                     <strong style='color: var(--text-main);'>Utilities</strong> &mdash; Heuristic tools to reduce triage fatigue.
                 </span>
                 <button class='btn-small' style='border-style: dashed; color: var(--text-muted); flex-shrink: 0;'
-                    title='Automatically moves probes whose target package does not match this test&apos;s package to Filtered Noise (Out of Scope).'
-                    onclick="event.stopPropagation(); autoSweep('{safe_id}', '{escape_js(test_class)}', this)">
-                    Auto-Sweep Distant Probes
+                    title='Group all unreviewed probes by target class and bulk-triage them as Out of Scope.'
+                    onclick="event.stopPropagation(); openBulkTriageModal('{safe_id}', '{escape_js(test_class)}')">
+                    🧹 Bulk Triage (By Target)
                 </button>
             </div>
             """
@@ -1267,87 +1267,123 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                 saveState();
             }}
 
-            // State for the sweep modal
-            let _sweepState = {{ testId: null, testPackage: null, groups: {{}} }};
+            // ── Bulk Triage Modal ────────────────────────────────────────
+            let _bulkState = {{ testId: null, groups: {{}} }};
 
-            function autoSweep(testId, testFqcn, btn) {{
-                const testParts = testFqcn.split('.');
-                testParts.pop();
-                const testPackage = testParts.join('.');
-
+            function openBulkTriageModal(testId, testFqcn) {{
                 const survivedList = document.getElementById(`list-t1-${{testId}}`);
                 if (!survivedList) return;
 
                 const unreviewed = Array.from(survivedList.querySelectorAll('li[data-state="unreviewed"]'));
-
-                // Group distant probes by their target package
-                const groups = {{}};
-                unreviewed.forEach(probeEl => {{
-                    const targetFqcn = probeEl.getAttribute('data-target-fqcn') || '';
-                    const targetParts = targetFqcn.split('.');
-                    targetParts.pop();
-                    const targetPackage = targetParts.join('.');
-                    if (testPackage && targetPackage && testPackage !== targetPackage) {{
-                        if (!groups[targetPackage]) groups[targetPackage] = [];
-                        groups[targetPackage].push(probeEl.getAttribute('data-probe-id'));
-                    }}
-                }});
-
-                const packageCount = Object.keys(groups).length;
-                if (packageCount === 0) {{
-                    alert(`Auto-Sweep: No distant probes found.\n\nTest package: "${{testPackage}}"\n\nAll remaining unreviewed probes already belong to the same package.`);
+                if (unreviewed.length === 0) {{
+                    showToast('No unreviewed probes remaining in this test.', 'success');
                     return;
                 }}
 
-                // Save state and build the modal body
-                _sweepState = {{ testId, testPackage, groups }};
-
-                const totalProbes = Object.values(groups).reduce((s, ids) => s + ids.length, 0);
-                const sortedPackages = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length);
-
-                let rowsHtml = '';
-                sortedPackages.forEach(pkg => {{
-                    const count = groups[pkg].length;
-                    rowsHtml += `
-                    <label style="display:flex; align-items:center; gap:12px; padding:10px 14px; border:1px solid #e2e8f0;
-                                  border-radius:8px; cursor:pointer; background:#fff; transition: background 0.15s;"
-                           onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
-                        <input type="checkbox" checked data-pkg="${{pkg}}"
-                               style="width:16px; height:16px; accent-color: var(--primary); cursor:pointer; flex-shrink:0;">
-                        <span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:600; color:var(--text-main); flex:1;">${{pkg}}</span>
-                        <span style="font-size:12px; font-weight:600; color:var(--text-muted); background:#f1f5f9;
-                                     padding:3px 10px; border-radius:9999px; white-space:nowrap;">${{count}} probe${{count !== 1 ? 's' : ''}}</span>
-                    </label>`;
+                // Group by target FQCN (class level)
+                const groups = {{}};
+                unreviewed.forEach(probeEl => {{
+                    const fqcn = probeEl.getAttribute('data-target-fqcn') || 'unknown';
+                    if (!groups[fqcn]) groups[fqcn] = [];
+                    groups[fqcn].push({{
+                        probeId: probeEl.getAttribute('data-probe-id'),
+                        desc: probeEl.querySelector('.probe-desc') ? probeEl.querySelector('.probe-desc').textContent.trim() : ''
+                    }});
                 }});
 
-                document.getElementById('sweepModalTestPkg').innerText = testPackage;
-                document.getElementById('sweepModalTotal').innerText = `${{totalProbes}} probe${{totalProbes !== 1 ? 's' : ''}} across ${{packageCount}} package${{packageCount !== 1 ? 's' : ''}}`;
-                document.getElementById('sweepModalRows').innerHTML = rowsHtml;
-                document.getElementById('sweepModal').style.display = 'block';
+                _bulkState = {{ testId, groups }};
+
+                // Build tree UI — sorted by probe count descending
+                const sortedFqcns = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length);
+                const totalProbes = unreviewed.length;
+                const testShortName = testFqcn.split('.').pop();
+
+                // Header info
+                document.getElementById('bulkModalTitle').innerText = `Bulk Triage — ${{testShortName}}`;
+                document.getElementById('bulkModalSubtitle').innerText =
+                    `${{totalProbes}} unreviewed probe${{totalProbes !== 1 ? 's' : ''}} across ${{sortedFqcns.length}} target class${{sortedFqcns.length !== 1 ? 'es' : ''}}`;
+
+                // Build tree rows
+                let treeHtml = '';
+                sortedFqcns.forEach((fqcn, idx) => {{
+                    const probes = groups[fqcn];
+                    const shortClass = fqcn === 'unknown' ? 'Unknown' : fqcn.split('.').pop();
+                    const pkg = fqcn === 'unknown' ? '' : fqcn.split('.').slice(0, -1).join('.');
+                    const nodeId = `bulk-node-${{idx}}`;
+                    const isFirst = idx === 0;
+
+                    const probeRows = probes.map(p => `
+                        <div class="bulk-probe-row" data-probe-id="${{p.probeId}}">
+                            <label style="display:flex; align-items:flex-start; gap:10px; padding:6px 8px; border-radius:var(--radius-sm); cursor:pointer; transition:background 0.1s;"
+                                   onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                                <input type="checkbox" checked data-probe="${{p.probeId}}" data-fqcn="${{fqcn}}"
+                                       style="width:15px;height:15px;flex-shrink:0;margin-top:2px;accent-color:var(--primary);cursor:pointer;">
+                                <span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--text-muted);line-height:1.4;">${{p.desc}}</span>
+                            </label>
+                        </div>`).join('');
+
+                    treeHtml += `
+                    <div class="bulk-class-node" style="border:1px solid var(--border-color);border-radius:var(--radius-md);overflow:hidden;margin-bottom:8px;">
+                        <div class="bulk-node-header" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8fafc;cursor:pointer;user-select:none;"
+                             onclick="toggleBulkNode('${{nodeId}}', this)">
+                            <span class="bulk-toggle-icon" style="font-size:11px;width:14px;flex-shrink:0;color:var(--text-muted);">${{isFirst ? '▼' : '▶'}}</span>
+                            <input type="checkbox" checked data-class-fqcn="${{fqcn}}"
+                                   style="width:16px;height:16px;accent-color:var(--primary);cursor:pointer;flex-shrink:0;"
+                                   onclick="event.stopPropagation(); toggleClassCheck(this, '${{fqcn}}')">
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-weight:700;font-size:14px;color:var(--text-main);">${{shortClass}}</div>
+                                ${{pkg ? `<div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--text-muted);margin-top:1px;">${{pkg}}</div>` : ''}}
+                            </div>
+                            <span style="font-size:12px;font-weight:600;color:var(--text-muted);background:#e2e8f0;padding:3px 10px;border-radius:9999px;white-space:nowrap;flex-shrink:0;">${{probes.length}} probe${{probes.length !== 1 ? 's' : ''}}</span>
+                        </div>
+                        <div id="${{nodeId}}" style="display:${{isFirst ? 'block' : 'none'}};padding:6px 14px 10px 14px;background:#fff;border-top:1px solid var(--border-color);">
+                            ${{probeRows}}
+                        </div>
+                    </div>`;
+                }});
+
+                document.getElementById('bulkModalTree').innerHTML = treeHtml;
+                document.getElementById('bulkModal').style.display = 'block';
                 document.body.style.overflow = 'hidden';
             }}
 
-            function confirmSweep() {{
-                const {{ testId, groups }} = _sweepState;
-                const checkboxes = document.querySelectorAll('#sweepModalRows input[type=checkbox]');
-                let sweptCount = 0;
-                checkboxes.forEach(cb => {{
-                    if (cb.checked) {{
-                        const pkg = cb.getAttribute('data-pkg');
-                        (groups[pkg] || []).forEach(probeId => {{
-                            triageTest(testId, probeId, 'noise', 'Out of Scope (Auto-Swept)');
-                            sweptCount++;
-                        }});
-                    }}
-                }});
-                closeSweepModal();
+            function toggleBulkNode(nodeId, header) {{
+                const content = document.getElementById(nodeId);
+                const icon = header.querySelector('.bulk-toggle-icon');
+                const isOpen = content.style.display !== 'none';
+                content.style.display = isOpen ? 'none' : 'block';
+                icon.textContent = isOpen ? '▶' : '▼';
             }}
 
-            function closeSweepModal() {{
-                document.getElementById('sweepModal').style.display = 'none';
-                document.body.style.overflow = 'auto';
-                _sweepState = {{ testId: null, testPackage: null, groups: {{}} }};
+            function toggleClassCheck(masterCb, fqcn) {{
+                // Sync all probe checkboxes under this class
+                document.querySelectorAll(`#bulkModalTree input[data-fqcn="${{fqcn}}"][data-probe]`).forEach(cb => {{
+                    cb.checked = masterCb.checked;
+                }});
             }}
+
+            function confirmBulkTriage() {{
+                const {{ testId, groups }} = _bulkState;
+                const checkboxes = document.querySelectorAll('#bulkModalTree input[data-probe]');
+                let count = 0;
+                checkboxes.forEach(cb => {{
+                    if (cb.checked) {{
+                        triageTest(testId, cb.getAttribute('data-probe'), 'noise', 'Out of Scope (Bulk Triage)');
+                        count++;
+                    }}
+                }});
+                closeBulkModal();
+                if (count > 0) showToast(`${{count}} probe${{count !== 1 ? 's' : ''}} marked as Out of Scope.`, 'success');
+            }}
+
+            function closeBulkModal() {{
+                document.getElementById('bulkModal').style.display = 'none';
+                document.body.style.overflow = 'auto';
+                _bulkState = {{ testId: null, groups: {{}} }};
+            }}
+
+            // Keep old closeSweepModal as alias so any stale references don't break
+            function closeSweepModal() {{ closeBulkModal(); }}
             function triageCode(methodId, probeId, decisionType, tagText) {{
 
                 const actionsContainer = document.getElementById(`code-actions-${{probeId}}`);
@@ -1681,23 +1717,23 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
 
         </div>
 
-        <div id="sweepModal" class="modal" onclick="if(event.target===this) closeSweepModal()">
-            <div class="modal-content" style="width: 560px; height: auto; max-height: 80vh; margin: 6% auto;">
+        <div id="bulkModal" class="modal" onclick="if(event.target===this) closeBulkModal()">
+            <div class="modal-content" style="width: 620px; height: auto; max-height: 82vh; margin: 5% auto; display:flex; flex-direction:column;">
                 <div class="modal-header">
-                    <h2>Sweep Distant Probes</h2>
-                    <span class="close" onclick="closeSweepModal()">&times;</span>
+                    <div>
+                        <h2 id="bulkModalTitle" style="margin:0 0 2px 0;">Bulk Triage</h2>
+                        <div id="bulkModalSubtitle" style="font-size:13px; color:var(--text-muted); font-weight:400;"></div>
+                    </div>
+                    <span class="close" onclick="closeBulkModal()">&times;</span>
                 </div>
-                <p style="margin: 0 0 6px 0; font-size: 13px; color: var(--text-muted);">
-                    Test package: <code id="sweepModalTestPkg" style="font-weight:700; color: var(--text-main);"></code>
+                <p style="margin: 0 0 14px 0; font-size:13px; color:var(--text-muted); line-height:1.5;">
+                    Probes are grouped by the class they target. Expand a class to review individual probes.
+                    Checked probes will be marked <strong>Out of Scope</strong> on confirm.
                 </p>
-                <p style="margin: 0 0 16px 0; font-size: 13px; color: var(--text-muted);">
-                    Found <strong id="sweepModalTotal"></strong> outside this package, grouped below.
-                    <br>Uncheck any package you want to <strong>keep</strong> in your inbox, then confirm.
-                </p>
-                <div id="sweepModalRows" style="display:flex; flex-direction:column; gap:8px; max-height:45vh; overflow-y:auto; padding-right:4px;"></div>
-                <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px; padding-top:16px; border-top:1px solid #e2e8f0;">
-                    <button class="btn-small" onclick="closeSweepModal()">Cancel</button>
-                    <button class="btn-primary" onclick="confirmSweep()">Confirm Sweep</button>
+                <div id="bulkModalTree" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:0; min-height:0;"></div>
+                <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px; padding-top:16px; border-top:1px solid var(--border-color);">
+                    <button class="btn-small" onclick="closeBulkModal()">Cancel</button>
+                    <button class="btn-primary" onclick="confirmBulkTriage()">Confirm Triage</button>
                 </div>
             </div>
         </div>
@@ -1781,14 +1817,14 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             window.onclick = function(event) {{
                 const codeModal = document.getElementById('codeModal');
                 if (event.target == codeModal) closeModal();
-                const sweepModal = document.getElementById('sweepModal');
-                if (event.target == sweepModal) closeSweepModal();
+                const bulkModal = document.getElementById('bulkModal');
+                if (event.target == bulkModal) closeBulkModal();
             }}
 
             document.addEventListener('keydown', function(event) {{
                 if (event.key === "Escape") {{
                     closeModal();
-                    closeSweepModal();
+                    closeBulkModal();
                 }}
             }});
         </script>
