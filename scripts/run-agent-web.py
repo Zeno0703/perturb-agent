@@ -226,6 +226,12 @@ def escape_js(text):
 def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_stats, metrics, global_tier3_probes):
     html_path = os.path.join(project_dir, OUT_DIR, "dashboard.html")
 
+    # Build sorted probe ID list for the persistence storage key
+    all_probe_ids = sorted(set(
+        p['id'] for p in dashboard_ledger
+    ))
+    probe_ids_json = json.dumps(all_probe_ids)
+
     file_cache = {}
     needed_files = set()
 
@@ -842,6 +848,126 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             window.totalTestCount = {total_tests};
             window.totalMethodCount = {valid_methods_count};
 
+            // ── Persistence ──────────────────────────────────────────────
+            // Key is hashed from probe IDs so different runs get separate slots
+            const _PROBE_IDS = {probe_ids_json};
+            const _STORAGE_KEY = 'perturb_triage_' + _PROBE_IDS.slice().sort().join(',').split('').reduce((h,c)=>((h<<5)-h+c.charCodeAt(0))|0, 0);
+
+            function saveState() {{
+                const state = {{}};
+                document.querySelectorAll('li[data-probe-id]').forEach(el => {{
+                    const pid = el.getAttribute('data-probe-id');
+                    const s   = el.getAttribute('data-state');
+                    const tid = el.getAttribute('data-test-id');
+                    const tag = el.querySelector('.triage-tag') ? el.querySelector('.triage-tag').innerText : null;
+                    if (s && s !== 'unreviewed') {{
+                        if (!state[pid]) state[pid] = [];
+                        state[pid].push({{ testId: tid, decision: s, tag }});
+                    }}
+                }});
+                try {{ localStorage.setItem(_STORAGE_KEY, JSON.stringify(state)); }} catch(e) {{}}
+            }}
+
+            function loadState(state) {{
+                if (!state) return;
+                Object.entries(state).forEach(([pid, entries]) => {{
+                    entries.forEach(entry => {{
+                        const {{ testId, decision, tag }} = entry;
+                        const tagText = tag ? tag.replace(/^\[\s*|\s*\]$/g, '') : decision;
+                        // Route to the right triage function
+                        if (decision === 'action-code' || decision === 'equivalent-code') {{
+                            // code-centric probe — find its methodId
+                            const el = document.getElementById(`code-probe-${{pid}}`);
+                            if (el && el.getAttribute('data-state') !== decision) {{
+                                const list = el.closest('ul');
+                                const methodId = list ? list.id.replace('list-code-t2-', '') : null;
+                                if (methodId) triageCode(methodId, pid, decision, tagText);
+                            }}
+                        }} else if (testId) {{
+                            const el = document.getElementById(`probe-${{testId}}-${{pid}}`);
+                            if (el && el.getAttribute('data-state') === 'unreviewed') {{
+                                triageTest(testId, pid, decision, tagText);
+                            }}
+                        }}
+                    }});
+                }});
+            }}
+
+            function exportState() {{
+                const state = {{}};
+                document.querySelectorAll('li[data-probe-id]').forEach(el => {{
+                    const pid = el.getAttribute('data-probe-id');
+                    const s   = el.getAttribute('data-state');
+                    const tid = el.getAttribute('data-test-id');
+                    const tag = el.querySelector('.triage-tag') ? el.querySelector('.triage-tag').innerText : null;
+                    if (s && s !== 'unreviewed') {{
+                        if (!state[pid]) state[pid] = [];
+                        state[pid].push({{ testId: tid, decision: s, tag }});
+                    }}
+                }});
+                const blob = new Blob([JSON.stringify({{ version: 1, probeIds: _PROBE_IDS, state }}, null, 2)], {{type: 'application/json'}});
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'triage-state.json';
+                a.click();
+                URL.revokeObjectURL(a.href);
+            }}
+
+            function importState(file) {{
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = e => {{
+                    try {{
+                        const data = JSON.parse(e.target.result);
+                        if (!data.state) {{ showToast('❌ Invalid file — missing state field.', 'error'); return; }}
+
+                        // Count how many decisions will be skipped (probe no longer exists)
+                        const imported = new Set(data.probeIds || []);
+                        const current  = new Set(_PROBE_IDS);
+                        const skipped  = [...imported].filter(p => !current.has(p)).length;
+                        const restored = Object.keys(data.state).length - skipped;
+
+                        loadState(data.state);
+                        saveState();
+
+                        const banner = document.getElementById('import-banner');
+                        if (banner) banner.style.display = 'none';
+
+                        // Build a friendly summary — skipped count is expected after a re-run
+                        let msg = `✅ Imported — ${{restored}} decision${{restored !== 1 ? 's' : ''}} restored.`;
+                        if (skipped > 0) msg += ` ${{skipped}} probe${{skipped !== 1 ? 's' : ''}} no longer exist and were skipped.`;
+                        showToast(msg, 'success');
+                    }} catch(err) {{
+                        showToast('❌ Failed to parse triage-state.json: ' + err.message, 'error');
+                    }}
+                }};
+                reader.readAsText(file);
+            }}
+
+            function showToast(message, type) {{
+                const existing = document.getElementById('_toast');
+                if (existing) existing.remove();
+                const bg = type === 'error' ? 'var(--danger-bg)' : 'var(--success-bg)';
+                const border = type === 'error' ? 'var(--danger)' : 'var(--success)';
+                const color = type === 'error' ? 'var(--danger-text)' : 'var(--success-text)';
+                const toast = document.createElement('div');
+                toast.id = '_toast';
+                toast.innerText = message;
+                toast.style.cssText = `position:fixed; bottom:24px; right:24px; z-index:9999;
+                    background:${{bg}}; color:${{color}}; border:1px solid ${{border}};
+                    border-left:4px solid ${{border}}; border-radius:8px;
+                    padding:12px 18px; font-size:13px; font-weight:500;
+                    box-shadow:0 4px 12px rgba(0,0,0,0.1); max-width:420px;
+                    opacity:0; transition:opacity 0.2s ease;`;
+                document.body.appendChild(toast);
+                requestAnimationFrame(() => {{ toast.style.opacity = '1'; }});
+                setTimeout(() => {{
+                    toast.style.opacity = '0';
+                    setTimeout(() => toast.remove(), 200);
+                }}, 4000);
+            }}
+            // ── End Persistence ──────────────────────────────────────────
+
             function switchTab(tabId) {{
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -1009,6 +1135,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
 
                 updateBadge(testId);
                 updateAccordionCounts(testId);
+                saveState();
             }}
 
             // State for the sweep modal
@@ -1119,6 +1246,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
 
                 updateCodeAccordionCounts(methodId);
                 updateCodeBadge(methodId);
+                saveState();
             }}
 
             function updateCodeAccordionCounts(methodId) {{
@@ -1273,7 +1401,24 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
     </head>
     <body>
         <div class="container">
-            <h1>Perturbation Analysis Dashboard</h1>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:32px; gap:16px; flex-wrap:wrap;">
+                <h1 style="margin:0;">Perturbation Analysis Dashboard</h1>
+                <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+                    <input type="file" id="import-file-input" accept=".json" style="display:none;">
+                    <button class="btn-small" onclick="document.getElementById('import-file-input').click()"
+                            title="Load a previously exported triage-state.json to restore decisions">
+                        📂 Import Progress
+                    </button>
+                    <button class="btn-small" onclick="exportState()"
+                            title="Download current triage decisions as triage-state.json">
+                        💾 Export Progress
+                    </button>
+                </div>
+            </div>
+            <div id="import-banner" style="margin-bottom:20px; padding:12px 16px; background:#fffbeb; border:1px solid #fde68a; border-left:4px solid var(--warning); border-radius:8px; font-size:13px; color:var(--warning-text); display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                <span>💡 <strong>No saved progress found.</strong> If you have a previous <code>triage-state.json</code>, click <strong>Import Progress</strong> to restore your triage decisions.</span>
+                <button class="btn-small" style="flex-shrink:0;" onclick="document.getElementById('import-banner').style.display='none'">Dismiss</button>
+            </div>
 
             <div id="metrics-test" class="metrics-container active">
                 <div class="metric-card">
@@ -1439,6 +1584,27 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                 document.getElementById('codeModal').style.display = "none";
                 document.body.style.overflow = "auto";
             }}
+
+            // ── Bootstrap: replay localStorage on load ────────────────────
+            document.addEventListener('DOMContentLoaded', () => {{
+                try {{
+                    const saved = localStorage.getItem(_STORAGE_KEY);
+                    if (saved) {{
+                        loadState(JSON.parse(saved));
+                        const banner = document.getElementById('import-banner');
+                        if (banner) banner.style.display = 'none';
+                    }}
+                }} catch(e) {{}}
+
+                // Wire up the hidden file input for JSON import
+                const fileInput = document.getElementById('import-file-input');
+                if (fileInput) {{
+                    fileInput.addEventListener('change', e => {{
+                        importState(e.target.files[0]);
+                        fileInput.value = '';
+                    }});
+                }}
+            }});
 
             function renderAndHighlight(containerId, code, methodName) {{
                 const container = document.getElementById(containerId);
