@@ -191,7 +191,7 @@ def build_action_trace(p):
         action_list = ["State modification applied"]
 
     exceptions = p.get('exceptions', [])
-    exc_str = f" <span style='color: var(--danger); font-weight: 600;'>({escape_html(' | '.join(exceptions))})</span>" if exceptions else ""
+    exc_str = f" <span class='trace-exception'>({escape_html(' | '.join(exceptions))})</span>" if exceptions else ""
 
     disp = f"<span class='text-muted'>Execution Trace (Hit {len(action_list)} times):</span><br>"
     disp += "<div class='execution-trace'>"
@@ -254,12 +254,10 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
     for fqcn, is_test in needed_files:
         file_cache[(fqcn, is_test)] = read_java_file(project_dir, fqcn, is_test)
 
+    # Source files take priority over test files when the fqcn is shared
     serialisable_cache = {}
     for (fqcn, is_test), content in file_cache.items():
-        if is_test or fqcn not in serialisable_cache:
-            serialisable_cache[fqcn] = content
-    for (fqcn, is_test), content in file_cache.items():
-        if not is_test:
+        if fqcn not in serialisable_cache or not is_test:
             serialisable_cache[fqcn] = content
     file_cache_json = json.dumps(serialisable_cache).replace("</", "<\\/")
 
@@ -278,32 +276,32 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
 
         return f"""
         <tr id='ledger-row-{p['id']}' class="clickable-row" onclick="toggleRow(event, 'ledger-desc-{p['id']}')">
-            <td class="font-medium code-font">#{p['id']}</td>
-            <td class="code-font">{class_name}.{p['method']}()</td>
-            <td><div class="scrollable-text" style="max-width: 25vw;">{escape_html(p['desc'])}</div></td>
-            <td class="text-center">{len(p['tests'])} Tests</td>
-            <td class="text-right"><span id="ledger-badge-{p['id']}" class="badge {badge_class}">{status_text}</span></td>
+            <td><div class="scrollable-text font-medium code-font">#{p['id']}</div></td>
+            <td><div class="scrollable-text code-font">{class_name}.{p['method']}()</div></td>
+            <td><div class="scrollable-text">{escape_html(p['desc'])}</div></td>
+            <td class="text-center"><div class="scrollable-text" style="text-align:center;">{len(p['tests'])} Tests</div></td>
+            <td class="text-right"><div class="scrollable-text" style="text-align:right;"><span id="ledger-badge-{p['id']}" class="badge {badge_class}">{status_text}</span></div></td>
         </tr>
         <tr id="ledger-desc-{p['id']}" class="details-row" style="display: none;">
             <td colspan="5" class="p-0">
                 <div class="test-details">
                     <div style="display: flex; gap: 24px; margin-bottom: 0;">
-                        <div style="flex: 2; overflow: hidden;">
-                            <h4 style="margin-top: 0; font-size: 13px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Witness List (Footprint)</h4>
-                            <ul style="max-height: 150px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; padding-left: 20px; color: var(--text-main); margin: 0;">
+                        <div style="flex: 2; overflow: hidden; min-width: 0;">
+                            <h4 style="margin: 0 0 10px 0; font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.06em; font-weight: 700; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">Witness List</h4>
+                            <ul style="max-height: 150px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; padding-left: 18px; color: var(--text-main); margin: 0;">
                                 {witness_list}
                             </ul>
                         </div>
-                        <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; gap: 12px; border-left: 1px solid #e2e8f0; padding-left: 24px;">
-                            <h4 style="margin-top: 0; font-size: 13px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Action Panel</h4>
-                            <a href="{ide_link}" class="btn-primary" style="padding: 12px; font-size: 13px; text-align: center; justify-content: center; white-space: normal;">🔗 Open Target in IDE to Write a New Test</a>
-                            <button class="btn-small" style="padding: 12px; width: 100%; justify-content: center;" onclick="event.stopPropagation(); openCodeModal('{escape_js(p['fqcn'])}', '{escape_js(p['method'])}', null, null)">View Target Source Code</button>
+                        <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; border-left: 1px solid var(--border-color); padding-left: 24px; min-width: 200px;">
+                            <h4 style="margin: 0 0 2px 0; font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.06em; font-weight: 700; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">Actions</h4>
+                            <a href="{ide_link}" class="btn-primary" style="text-align: center; width: 100%;">Open Target in IDE</a>
+                            <button class="btn-small" style="width: 100%;" onclick="event.stopPropagation(); openCodeModal('{escape_js(p['fqcn'])}', '{escape_js(p['method'])}', null, null)">View Source</button>
                             <div class='ledger-resolve-wrap'>
                                 <button class='btn-resolve' data-resolve-ledger="{p['id']}"
                                     onclick="event.stopPropagation(); markResolved('{p['id']}', 'ledger', this)">
-                                    ☐ Mark as Fixed
+                                    Mark as Fixed
                                 </button>
-                                <div style='font-size:12px; color:var(--success-text); margin-top:6px;'>I have written a new test covering this probe.</div>
+                                <div style='font-size:11px; color:var(--success-text); margin-top:6px;'>I have written a new test covering this probe.</div>
                             </div>
                         </div>
                     </div>
@@ -314,15 +312,15 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
 
     def build_ledger_table(rows_html, tbody_id):
         return f"""
-        <div class="table-container" style="margin-top: 16px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div class="table-container" style="margin-top: 14px;">
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 100px;">Probe ID</th>
-                        <th style="width: 250px;">Target Location</th>
-                        <th>The Mutation</th>
-                        <th class="text-center" style="width: 120px;">Footprint</th>
-                        <th class="text-right" style="width: 180px;">Global Status</th>
+                        <th style="width: 110px;">Probe ID</th>
+                        <th style="width: 300px;">Target</th>
+                        <th>Mutation</th>
+                        <th class="text-center" style="width: 130px;">Footprint</th>
+                        <th class="text-right" style="width: 210px;">Status</th>
                     </tr>
                 </thead>
                 <tbody id="{tbody_id}">
@@ -441,14 +439,14 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
 
         if t1:
             inner_html += f"""
-            <div style='margin-bottom: 20px; padding: 10px 14px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; display: flex; align-items: center; gap: 12px; justify-content: space-between;'>
-                <span style='font-size: 12px; color: var(--text-muted); font-weight: 500;'>
-                    <strong style='color: var(--text-main);'>Test Utilities</strong> &mdash; Heuristic tools to reduce triage fatigue.
+            <div style='margin-bottom: 16px; padding: 10px 14px; background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); display: flex; align-items: center; gap: 12px; justify-content: space-between;'>
+                <span style='font-size: 12px; color: var(--text-muted);'>
+                    <strong style='color: var(--text-main);'>Utilities</strong> &mdash; Heuristic tools to reduce triage fatigue.
                 </span>
-                <button class='btn-small' style='border-style: dashed; color: var(--text-muted); white-space: nowrap; flex-shrink: 0;'
-                    title='Automatically moves probes whose target package does not match this test&apos;s package to Filtered Noise (Out of Scope). Uses the standard Maven package-matching convention.'
+                <button class='btn-small' style='border-style: dashed; color: var(--text-muted); flex-shrink: 0;'
+                    title='Automatically moves probes whose target package does not match this test&apos;s package to Filtered Noise (Out of Scope).'
                     onclick="event.stopPropagation(); autoSweep('{safe_id}', '{escape_js(test_class)}', this)">
-                    ✨ Auto-Sweep Distant Probes
+                    Auto-Sweep Distant Probes
                 </button>
             </div>
             """
@@ -472,7 +470,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                             <div class='probe-meta'>
                                 <span class='probe-id'>Probe {p['id']}</span>
                                 <div class='action-group'>
-                                    <button class="btn-small" onclick="event.stopPropagation(); openCodeModal('{escape_js(test_class)}', '{escape_js(test_method)}', '{escape_js(fqcn)}', '{escape_js(m_name)}')">View Source Code</button>
+                                    <button class="btn-small" onclick="event.stopPropagation(); openCodeModal('{escape_js(test_class)}', '{escape_js(test_method)}', '{escape_js(fqcn)}', '{escape_js(m_name)}')">View Source</button>
                                     <a href="{target_link}" class="btn-small">Open Target</a>
                                     <a href="{test_link}" class="btn-small">Open Test</a>
                                 </div>
@@ -488,12 +486,12 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                                 <button class='btn-triage btn-noise' title='This perturbation is inherently unobservable (e.g., Math.abs()). No input will ever catch this. It is a false positive generated by the tool.' onclick="triageTest('{safe_id}', '{p['id']}', 'equivalent', 'Equivalent')">Equivalent</button>
                                 <button class='btn-triage btn-noise' title='This specific test is not the right place to catch this. (Covers both Architectural Scope and Test Setup Masking).' onclick="triageTest('{safe_id}', '{p['id']}', 'noise', 'Out of Scope')">Out of Scope</button>
                             </div>
-                            <div id='resolve-wrap-{safe_id}-{p['id']}' style='display:none; margin: 8px -20px -20px -20px; padding: 10px 20px; background: var(--success-bg); border-top: 1px solid #a7f3d0; border-radius: 0 0 8px 8px;'>
+                            <div id='resolve-wrap-{safe_id}-{p['id']}' style='display:none; margin: 12px -20px -18px -20px; padding: 10px 20px; background: var(--success-bg); border-top: 1px solid #a7f3d0; border-radius: 0 0 var(--radius-md) var(--radius-md);'>
                                 <button class='btn-resolve' data-resolve-test="{p['id']}-{safe_id}"
                                     onclick="event.stopPropagation(); markResolved('{p['id']}', 'test-{safe_id}', this)">
-                                    ☐ Mark as Fixed
+                                    Mark as Fixed
                                 </button>
-                                <span style='font-size:12px; color:var(--success-text); margin-left:10px;'>I have written / improved the test for this probe.</span>
+                                <span style='font-size:11px; color:var(--success-text); margin-left:10px;'>I have written / improved the test for this probe.</span>
                             </div>
                         </li>
                         """
@@ -529,11 +527,11 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                 saviour_method = saviour_test.split('#')[1] if '#' in saviour_test else "unknown"
 
                 inner_html += f"""
-                        <li class='probe-item' style='border-left-color: var(--info); background-color: #f8fafc;'>
+                        <li class='probe-item' style='border-left-color: var(--info);'>
                             <div class='probe-meta'>
                                 <span class='probe-id'>Probe {p['id']}</span>
                                 <div class='action-group'>
-                                    <button class="btn-small" onclick="event.stopPropagation(); openCodeModal('{escape_js(test_class)}', '{escape_js(test_method)}', '{escape_js(fqcn)}', '{escape_js(m_name)}')">View Source Code</button>
+                                    <button class="btn-small" onclick="event.stopPropagation(); openCodeModal('{escape_js(test_class)}', '{escape_js(test_method)}', '{escape_js(fqcn)}', '{escape_js(m_name)}')">View Source</button>
                                     <a href="{target_link}" class="btn-small">Open Target</a>
                                     <a href="{test_link}" class="btn-small">Open Test</a>
                                 </div>
@@ -566,7 +564,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                             <div class='probe-meta'>
                                 <span class='probe-id'>Probe {p['id']}</span>
                                 <div class='action-group'>
-                                    <button class="btn-small" onclick="event.stopPropagation(); openCodeModal('{escape_js(test_class)}', '{escape_js(test_method)}', '{escape_js(fqcn)}', '{escape_js(m_name)}')">View Source Code</button>
+                                    <button class="btn-small" onclick="event.stopPropagation(); openCodeModal('{escape_js(test_class)}', '{escape_js(test_method)}', '{escape_js(fqcn)}', '{escape_js(m_name)}')">View Source</button>
                                     <a href="{target_link}" class="btn-small">Open Target</a>
                                     <a href="{test_link}" class="btn-small">Open Test</a>
                                 </div>
@@ -597,8 +595,8 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                     <span class="expand-hint" style="flex-shrink: 0;">Show details ▼</span>
                 </div>
             </td>
-            <td class="text-center">{semantic_hits}</td>
-            <td id="badge-{safe_id}" class="text-right">{badge_html}</td>
+            <td class="text-center"><div class="scrollable-text" style="text-align:center;">{semantic_hits}</div></td>
+            <td id="badge-{safe_id}" class="text-right"><div class="scrollable-text" style="text-align:right;">{badge_html}</div></td>
         </tr>
         <tr id="desc-{safe_id}" class="details-row" style="display: none;">
             <td colspan="3" class="p-0">{inner_html}</td>
@@ -636,24 +634,24 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                 <div class='probe-meta'>
                     <span class='probe-id'>Probe {p['id']}</span>
                     <div class='action-group'>
-                        <button class="btn-small" onclick="event.stopPropagation(); openCodeModal('{escape_js(m_fqcn)}', '{escape_js(m_name)}', null, null)">View Target Source Code</button>
+                        <button class="btn-small" onclick="event.stopPropagation(); openCodeModal('{escape_js(m_fqcn)}', '{escape_js(m_name)}', null, null)">View Source</button>
                     </div>
                 </div>
                 <div class='probe-desc scrollable-text'>{escape_html(p['desc'])}</div>
                 <div class='perturb-action'>{action_disp}</div>
-                <div style='margin-top: 12px; font-size: 12px; color: var(--text-muted); background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;'>
-                    <strong>Witnessed by {len(p['tests'])} Tests:</strong> <span style="font-family: ui-monospace, SFMono-Regular, monospace;">{escape_html(witness_list)}</span>
+                <div style='margin-top: 10px; font-size: 12px; color: var(--text-muted); background: #f8fafc; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);'>
+                    <strong>Witnessed by {len(p['tests'])} tests:</strong> <span class="code-font" style="font-weight:400;">{escape_html(witness_list)}</span>
                 </div>
                 <div class='triage-actions' id='code-actions-{p['id']}'>
-                    <button class='btn-triage btn-action' title='The code lacks defensive checks. I will add an if (x == null) to the production code.' onclick="triageCode('{safe_m_id}', '{p['id']}', 'action-code', 'Brittle Code')">Brittle Code</button>
-                    <button class='btn-triage btn-noise' title='This state can mathematically never happen in the real app. The tool hallucinated it.' onclick="triageCode('{safe_m_id}', '{p['id']}', 'equivalent-code', 'Impossible State')">Impossible State</button>
+                    <button class='btn-triage btn-action' title='The code lacks defensive checks. I will add defensive checks to the production code.' onclick="triageCode('{safe_m_id}', '{p['id']}', 'action-code', 'Brittle Code')">Brittle Code</button>
+                    <button class='btn-triage btn-noise' title='This state can mathematically never happen in the real app.' onclick="triageCode('{safe_m_id}', '{p['id']}', 'equivalent-code', 'Impossible State')">Impossible State</button>
                 </div>
-                <div id='code-resolve-wrap-{p['id']}' style='display:none; margin: 8px -20px -20px -20px; padding: 10px 20px; background: var(--success-bg); border-top: 1px solid #a7f3d0; border-radius: 0 0 8px 8px;'>
+                <div id='code-resolve-wrap-{p['id']}' style='display:none; margin: 12px -20px -18px -20px; padding: 10px 20px; background: var(--success-bg); border-top: 1px solid #a7f3d0; border-radius: 0 0 var(--radius-md) var(--radius-md);'>
                     <button class='btn-resolve' data-resolve-code="{p['id']}"
                         onclick="event.stopPropagation(); markResolved('{p['id']}', 'code', this)">
-                        ☐ Mark as Fixed
+                        Mark as Fixed
                     </button>
-                    <span style='font-size:12px; color:var(--success-text); margin-left:10px;'>I have fixed the brittle code for this probe.</span>
+                    <span style='font-size:11px; color:var(--success-text); margin-left:10px;'>I have fixed the brittle code for this probe.</span>
                 </div>
             </li>
             """
@@ -678,10 +676,10 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                     <span class="expand-hint" style="flex-shrink: 0;">Show details ▼</span>
                 </div>
             </td>
-            <td class="text-center font-medium text-warning">{len(stats['probes'])} Crashes</td>
-            <td id="code-badge-{safe_m_id}" class="text-right">
+            <td class="text-center"><div class="scrollable-text font-medium text-warning" style="text-align:center;">{len(stats['probes'])} Crashes</div></td>
+            <td id="code-badge-{safe_m_id}" class="text-right"><div class="scrollable-text" style="text-align:right;">
                 <span class="status-pill pending">[ {len(stats['probes'])} Unreviewed ]</span>
-            </td>
+            </div></td>
         </tr>
         <tr id="code-desc-{safe_m_id}" class="details-row" style="display: none;">
             <td colspan="3" class="p-0">
@@ -700,60 +698,69 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css">
         <style>
             :root {{
-                --bg-main: #f8fafc;
+                --bg-main: #f1f5f9;
                 --bg-card: #ffffff;
                 --text-main: #0f172a;
                 --text-muted: #64748b;
-                --border-color: #cbd5e1;
-                --danger: #ef4444;
+                --border-color: #e2e8f0;
+                --border-strong: #cbd5e1;
+                --danger: #dc2626;
                 --danger-bg: #fef2f2;
                 --danger-text: #991b1b;
-                --warning: #f59e0b;
+                --warning: #d97706;
                 --warning-bg: #fffbeb;
                 --warning-text: #92400e;
-                --success: #10b981;
+                --success: #059669;
                 --success-bg: #ecfdf5;
                 --success-text: #065f46;
-                --info: #0ea5e9;
+                --info: #0284c7;
                 --info-bg: #f0f9ff;
                 --info-text: #0369a1;
                 --orange: #ea580c;
-                --orange-bg: #ffedd5;
-                --primary: #3b82f6;
+                --orange-bg: #fff7ed;
+                --primary: #2563eb;
+                --primary-bg: #eff6ff;
+                --radius-sm: 6px;
+                --radius-md: 8px;
+                --radius-lg: 12px;
+                --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+                --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
             }}
+            * {{ box-sizing: border-box; }}
             body {{
-                font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                 background-color: var(--bg-main);
                 color: var(--text-main);
                 margin: 0;
-                padding: 32px 0;
+                padding: 32px 0 48px;
                 line-height: 1.5;
+                font-size: 15px;
             }}
-            .container {{ width: 100%; padding: 0 32px; box-sizing: border-box; }}
-            h1 {{ font-size: 28px; font-weight: 700; margin-bottom: 32px; color: var(--text-main); letter-spacing: -0.02em; }}
+            .container {{ width: 100%; padding: 0 40px; }}
+            h1 {{ font-size: 22px; font-weight: 700; margin: 0; color: var(--text-main); letter-spacing: -0.02em; }}
 
-            .metrics-container {{ display: none; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 32px; }}
+            .metrics-container {{ display: none; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 28px; }}
             .metrics-container.active {{ display: grid; }}
 
-            .metric-card {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05); }}
-            .metric-value {{ font-size: 36px; font-weight: 700; color: var(--text-main); line-height: 1.1; margin-bottom: 4px; letter-spacing: -0.02em; }}
-            .metric-label {{ font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }}
+            .metric-card {{ background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px 24px; text-align: left; box-shadow: var(--shadow-sm); }}
+            .metric-value {{ font-size: 28px; font-weight: 700; color: var(--text-main); line-height: 1.1; margin-bottom: 4px; letter-spacing: -0.02em; }}
+            .metric-label {{ font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }}
 
-            .tabs {{ display: flex; border-bottom: 2px solid #e2e8f0; margin-bottom: 24px; gap: 32px; }}
-            .tab {{ padding: 12px 0; font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s ease; }}
+            .tabs {{ display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 24px; gap: 0; }}
+            .tab {{ padding: 11px 20px; font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s ease; }}
             .tab:hover {{ color: var(--text-main); }}
             .tab.active {{ color: var(--primary); border-bottom-color: var(--primary); }}
             .tab-content {{ display: none; }}
             .tab-content.active {{ display: block; }}
 
-            .tab-header {{ margin-bottom: 24px; }}
-            .tab-header h2 {{ font-size: 20px; font-weight: 600; margin: 0 0 4px 0; color: var(--text-main); letter-spacing: -0.01em; }}
+            .tab-header {{ margin-bottom: 20px; }}
+            .tab-header h2 {{ font-size: 17px; font-weight: 700; margin: 0 0 4px 0; color: var(--text-main); letter-spacing: -0.01em; }}
             .tab-header p {{ margin: 0; color: var(--text-muted); font-size: 14px; }}
 
-            .table-container {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }}
+            .table-container {{ background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }}
             table {{ width: 100%; table-layout: fixed; border-collapse: collapse; text-align: left; }}
-            th, td {{ padding: 16px 20px; border-bottom: 1px solid var(--border-color); font-size: 14px; overflow: hidden; text-overflow: ellipsis; }}
-            th {{ background-color: #f8fafc; font-weight: 700; color: #475569; text-transform: uppercase; font-size: 12px; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0; }}
+            th, td {{ padding: 13px 20px; border-bottom: 1px solid var(--border-color); font-size: 14px; overflow: hidden; }}
+            th {{ background-color: #f8fafc; font-weight: 600; color: #475569; text-transform: uppercase; font-size: 12px; letter-spacing: 0.06em; border-bottom: 1px solid var(--border-color); }}
 
             .text-center {{ text-align: center; }}
             .text-right {{ text-align: right; }}
@@ -761,16 +768,14 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             .code-font {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; font-weight: 600; color: var(--text-main); }}
             .p-0 {{ padding: 0 !important; }}
 
-            .scrollable-text {{ display: block; width: 100%; overflow-x: auto; white-space: nowrap; padding-bottom: 4px; scrollbar-width: none; }}
+            .scrollable-text {{ display: block; width: 100%; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }}
             .scrollable-text::-webkit-scrollbar {{ display: none; }}
-            .scrollable-text:hover::-webkit-scrollbar {{ display: block; height: 6px; }}
-            .scrollable-text::-webkit-scrollbar-thumb {{ background: #cbd5e1; border-radius: 3px; }}
 
-            .badge {{ display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; line-height: 1.5; white-space: nowrap; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05); }}
-            .badge-danger {{ background-color: var(--danger-bg); color: var(--danger-text); }}
-            .badge-warning {{ background-color: var(--warning-bg); color: var(--warning-text); }}
-            .badge-success {{ background-color: var(--success-bg); color: var(--success-text); }}
-            .badge-primary {{ background-color: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }}
+            .badge {{ display: inline-flex; align-items: center; padding: 4px 11px; border-radius: 9999px; font-size: 12px; font-weight: 600; line-height: 1.5; white-space: nowrap; }}
+            .badge-danger {{ background-color: var(--danger-bg); color: var(--danger-text); border: 1px solid #fecaca; }}
+            .badge-warning {{ background-color: var(--warning-bg); color: var(--warning-text); border: 1px solid #fde68a; }}
+            .badge-success {{ background-color: var(--success-bg); color: var(--success-text); border: 1px solid #a7f3d0; }}
+            .badge-primary {{ background-color: var(--primary-bg); color: #1e40af; border: 1px solid #bfdbfe; }}
 
             .text-danger {{ color: var(--danger) !important; border-bottom-color: var(--danger) !important; }}
             .text-warning {{ color: var(--warning) !important; border-bottom-color: var(--warning) !important; }}
@@ -781,101 +786,107 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             .text-primary {{ color: var(--primary) !important; border-bottom-color: var(--primary) !important; }}
             .text-main {{ color: var(--text-main); }}
 
-            .clickable-row {{ cursor: pointer; transition: background-color 0.2s; }}
-            .clickable-row:hover {{ background-color: #f1f5f9; }}
-            .expand-hint {{ font-size: 12px; color: var(--text-muted); font-weight: 600; transition: color 0.2s; }}
+            .clickable-row {{ cursor: pointer; transition: background-color 0.15s; }}
+            .clickable-row:hover {{ background-color: #f8fafc; }}
+            .expand-hint {{ font-size: 13px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.02em; transition: color 0.15s; white-space: nowrap; }}
             .clickable-row:hover .expand-hint {{ color: var(--primary); }}
 
-            .details-row {{ background-color: #f8fafc; box-shadow: inset 0 4px 8px -4px rgba(0, 0, 0, 0.05), inset 0 -4px 8px -4px rgba(0, 0, 0, 0.05); }} 
-            .test-details {{ padding: 32px 24px; }}
+            .details-row {{ background-color: #f8fafc; }}
+            .test-details {{ padding: 28px 24px; }}
 
-            .details-section {{ margin-bottom: 32px; }}
+            .details-section {{ margin-bottom: 28px; }}
             .details-section:last-child {{ margin-bottom: 0; }}
-            .details-title {{ font-size: 14px; font-weight: 700; border-bottom: 2px solid; padding-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }}
+            .details-title {{ font-size: 13px; font-weight: 700; border-bottom: 2px solid; padding-bottom: 8px; text-transform: uppercase; letter-spacing: 0.07em; }}
 
-            .accordion-header {{ cursor: pointer; user-select: none; transition: opacity 0.2s; display: flex; align-items: center; }}
+            .accordion-header {{ cursor: pointer; user-select: none; transition: opacity 0.15s; display: flex; align-items: center; }}
             .accordion-header:hover {{ opacity: 0.7; }}
-            .accordion-icon {{ display: inline-block; width: 20px; font-size: 12px; }}
+            .accordion-icon {{ display: inline-block; width: 18px; font-size: 10px; }}
 
-            .details-list {{ list-style: none; padding: 0; margin: 16px 0 0 0; display: flex; flex-direction: column; gap: 16px; }}
+            .details-list {{ list-style: none; padding: 0; margin: 14px 0 0 0; display: flex; flex-direction: column; gap: 12px; }}
 
-            .probe-item {{ background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #cbd5e1; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02); display: flex; flex-direction: column; transition: all 0.2s ease; }}
-            .probe-item:hover {{ box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.03); }}
+            .probe-item {{ background: #ffffff; border: 1px solid var(--border-color); border-left: 3px solid var(--border-strong); border-radius: var(--radius-md); padding: 18px 20px; display: flex; flex-direction: column; transition: box-shadow 0.15s ease; }}
+            .probe-item:hover {{ box-shadow: var(--shadow-md); }}
 
-            .probe-meta {{ display: flex; align-items: center; gap: 12px; margin-bottom: 16px; font-size: 13px; }}
-            .probe-id {{ font-weight: 700; color: var(--text-main); font-size: 15px; }}
-            .probe-desc {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; color: var(--text-main); margin-bottom: 12px; background: #f8fafc; padding: 10px 14px; border-radius: 6px; border: 1px solid #e2e8f0; }}
-            .probe-warning {{ background-color: var(--danger-bg); color: var(--danger-text); padding: 12px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; margin-top: 12px; border-left: 4px solid var(--danger); }}
+            .probe-meta {{ display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }}
+            .probe-id {{ font-weight: 700; color: var(--text-muted); font-size: 13px; letter-spacing: 0.03em; text-transform: uppercase; }}
+            .probe-desc {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; color: var(--text-main); margin-bottom: 10px; background: #f8fafc; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); }}
+            .probe-warning {{ background-color: var(--danger-bg); color: var(--danger-text); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; margin-top: 10px; border-left: 3px solid var(--danger); }}
 
             .perturb-action {{ font-size: 13px; margin-top: 4px; display: inline-block; color: var(--text-main); width: 100%; }}
-            .execution-trace {{ max-height: 100px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; margin-top: 8px; padding: 8px 12px; background: #f8fafc; border-left: 3px solid #cbd5e1; border-radius: 0 4px 4px 0; }}
+            .execution-trace {{ max-height: 90px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; margin-top: 6px; padding: 8px 12px; background: #f8fafc; border-left: 3px solid var(--border-strong); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }}
 
-            .saviour-box {{ margin-top: 16px; font-size: 13px; padding: 12px 16px; background-color: #ffffff; border-radius: 6px; border-left: 4px solid var(--info); box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; border-left-width: 4px; }}
-            .saviour-link {{ font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 600; text-decoration: none; color: var(--primary); cursor: pointer; transition: color 0.2s; }}
+            .saviour-box {{ margin-top: 14px; font-size: 13px; padding: 10px 14px; background-color: var(--info-bg); border-radius: var(--radius-sm); border: 1px solid #bae6fd; border-left: 3px solid var(--info); }}
+            .saviour-link {{ font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 600; text-decoration: none; color: var(--primary); cursor: pointer; transition: color 0.15s; }}
             .saviour-link:hover {{ color: var(--text-main); text-decoration: underline; }}
 
-            .action-group {{ display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: nowrap; }}
+            .action-group {{ display: flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: nowrap; }}
 
-            .btn-small {{ display: inline-flex; align-items: center; background-color: #ffffff; color: var(--text-main); border: 1px solid #cbd5e1; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; transition: all 0.2s ease-in-out; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.02); white-space: nowrap; }}
-            .btn-small:hover {{ background-color: #f1f5f9; border-color: #94a3b8; color: var(--primary); text-decoration: none; }}
+            /* Unified button base */
+            .btn-small, .btn-primary, .btn-resolve, .btn-triage {{
+                display: inline-flex; align-items: center; justify-content: center;
+                height: 32px; padding: 0 13px;
+                border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+                cursor: pointer; transition: all 0.15s ease; white-space: nowrap;
+                text-decoration: none; line-height: 1;
+            }}
+            .btn-small {{ background: #ffffff; color: var(--text-main); border: 1px solid var(--border-strong); box-shadow: var(--shadow-sm); }}
+            .btn-small:hover {{ background: #f1f5f9; border-color: #94a3b8; color: var(--primary); text-decoration: none; }}
+            .btn-primary {{ background: var(--primary); color: #ffffff; border: none; box-shadow: 0 1px 3px rgba(37,99,235,0.3); height: 32px; padding: 0 14px; }}
+            .btn-primary:hover {{ background: #1d4ed8; color: #ffffff; text-decoration: none; }}
 
-            .btn-primary {{ display: inline-flex; align-items: center; background-color: var(--primary); color: #ffffff; border: none; text-decoration: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; transition: all 0.2s ease-in-out; cursor: pointer; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3); white-space: nowrap; }}
-            .btn-primary:hover {{ background-color: #2563eb; color: #ffffff; text-decoration: none; }}
-
-            .triage-actions {{ margin: 20px -20px -20px -20px; padding: 14px 20px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; border-radius: 0 0 8px 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
-            .btn-triage {{ padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; border: 1px solid transparent; background: transparent; }}
-            .btn-action {{ color: var(--danger); border-color: #fca5a5; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }}
+            .triage-actions {{ margin: 16px -20px -18px -20px; padding: 12px 20px; background-color: #f8fafc; border-top: 1px solid var(--border-color); border-radius: 0 0 var(--radius-md) var(--radius-md); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
+            .btn-triage {{ height: 30px; padding: 0 13px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s; border: 1px solid transparent; background: transparent; }}
+            .btn-action {{ color: var(--danger); border-color: #fca5a5; background: #ffffff; }}
             .btn-action:hover {{ background: var(--danger-bg); border-color: var(--danger); }}
-            .btn-noise {{ color: var(--text-muted); border-color: #cbd5e1; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }}
+            .btn-noise {{ color: var(--text-muted); border-color: var(--border-strong); background: #ffffff; }}
             .btn-noise:hover {{ background: #f1f5f9; color: var(--text-main); border-color: #94a3b8; }}
 
-            .cascaded-item {{ border-left: 4px solid var(--orange) !important; box-shadow: 0 0 0 1px var(--orange-bg) !important; }}
-            .action-required {{ border-left: 4px solid var(--danger) !important; box-shadow: 0 0 0 1px var(--danger-bg); }}
-            .noise-item {{ opacity: 0.6; border-left: 4px solid #cbd5e1 !important; }}
+            .cascaded-item {{ border-left-color: var(--orange) !important; }}
+            .action-required {{ border-left-color: var(--danger) !important; }}
+            .noise-item {{ opacity: 0.55; border-left-color: var(--border-strong) !important; }}
 
-            .triage-tag {{ display: inline-block; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05); }}
+            .triage-tag {{ display: inline-block; padding: 4px 10px; border-radius: var(--radius-sm); font-weight: 600; font-size: 13px; }}
             .tag-action {{ background: var(--danger-bg); color: var(--danger-text); border: 1px solid #fecaca; }}
             .tag-cascaded {{ background: var(--orange-bg); color: var(--orange); border: 1px solid #fdba74; }}
-            .tag-noise {{ background: #f1f5f9; color: var(--text-muted); border: 1px solid #cbd5e1; }}
+            .tag-noise {{ background: #f1f5f9; color: var(--text-muted); border: 1px solid var(--border-strong); }}
 
-            .status-pill {{ display: inline-block; padding: 6px 14px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05); }}
+            .status-pill {{ display: inline-block; padding: 5px 13px; border-radius: 9999px; font-size: 13px; font-weight: 600; white-space: nowrap; }}
             .status-pill.clear {{ background: var(--success-bg); color: var(--success-text); border: 1px solid #a7f3d0; }}
             .status-pill.action {{ background: var(--danger-bg); color: var(--danger-text); border: 1px solid #fecaca; }}
             .status-pill.mid {{ background: var(--warning-bg); color: var(--warning-text); border: 1px solid #fde68a; }}
-            .status-pill.pending {{ background: #ffffff; color: var(--text-muted); border: 1px solid #cbd5e1; }}
+            .status-pill.pending {{ background: #f1f5f9; color: var(--text-muted); border: 1px solid var(--border-strong); }}
 
-            /* Modal Styles */
-            .modal {{ display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); }}
-            .modal-content {{ background-color: #ffffff; margin: 2% auto; padding: 24px; border: 1px solid #cbd5e1; width: 94%; height: 85%; border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column; }}
-            .modal-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }}
-            .modal-header h2 {{ margin: 0; font-size: 20px; color: var(--text-main); font-weight: 700; }}
-            .close {{ color: var(--text-muted); font-size: 28px; font-weight: bold; cursor: pointer; transition: color 0.2s; line-height: 1; margin-top: -4px; }}
+            /* Modal */
+            .modal {{ display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(15, 23, 42, 0.65); backdrop-filter: blur(3px); }}
+            .modal-content {{ background-color: #ffffff; margin: 2% auto; padding: 24px; border: 1px solid var(--border-color); width: 94%; height: 85%; border-radius: var(--radius-lg); box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; }}
+            .modal-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border-color); }}
+            .modal-header h2 {{ margin: 0; font-size: 16px; color: var(--text-main); font-weight: 700; }}
+            .close {{ color: var(--text-muted); font-size: 24px; font-weight: bold; cursor: pointer; transition: color 0.15s; line-height: 1; }}
             .close:hover {{ color: var(--text-main); }}
 
-            .split-view {{ display: flex; gap: 20px; height: 100%; overflow: hidden; }}
-            .split-pane {{ flex: 1; display: flex; flex-direction: column; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #f8fafc; transition: all 0.3s ease; box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02); }}
-            .split-pane h3 {{ margin: 0; padding: 14px 20px; background: #ffffff; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.02); z-index: 10; }}
-            .pane-subtitle {{ font-weight: 500; color: var(--primary); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+            .split-view {{ display: flex; gap: 16px; height: 100%; overflow: hidden; }}
+            .split-pane {{ flex: 1; display: flex; flex-direction: column; border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden; background: #f8fafc; }}
+            .split-pane h3 {{ margin: 0; padding: 12px 16px; background: #ffffff; border-bottom: 1px solid var(--border-color); font-size: 12px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px; }}
+            .pane-subtitle {{ font-weight: 500; color: var(--primary); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
 
-            .code-container {{ flex: 1; overflow: auto; background: #ffffff; padding: 20px; }}
+            .code-container {{ flex: 1; overflow: auto; background: #ffffff; padding: 16px 20px; }}
             .code-container pre {{ margin: 0; }}
-            .code-container code {{ font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; font-size: 13px; line-height: 1.6; }}
-            mark.scroll-target {{ background-color: #fef08a; color: #854d0e; border-radius: 3px; padding: 2px 4px; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }}
+            .code-container code {{ font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; font-size: 12px; line-height: 1.6; }}
+            mark.scroll-target {{ background-color: #fef08a; color: #854d0e; border-radius: 3px; padding: 1px 3px; font-weight: 600; }}
 
-            /* Resolved / Mark-as-fixed state */
-            .resolved-item {{ opacity: 0.65; }}
+            /* Resolved state */
+            .resolved-item {{ opacity: 0.6; }}
             .resolved-item .probe-desc,
             .resolved-item .probe-warning,
             .resolved-item .perturb-action {{ text-decoration: line-through; text-decoration-color: var(--success); }}
-            .btn-resolve {{ display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 6px;
-                            cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s;
-                            border: 1.5px solid var(--success); color: var(--success-text);
-                            background: var(--success-bg); }}
+            .btn-resolve {{ height: 30px; padding: 0 13px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s; border: 1px solid var(--success); color: var(--success-text); background: var(--success-bg); }}
             .btn-resolve:hover {{ background: #d1fae5; border-color: #059669; }}
-            .btn-resolve.is-resolved {{ background: var(--success-bg); color: var(--success-text);
-                                        border-color: var(--success); cursor: default; }}
+            .btn-resolve.is-resolved {{ cursor: default; opacity: 0.7; }}
             .status-pill.resolved {{ background: var(--success-bg); color: var(--success-text); border: 1px solid #a7f3d0; }}
-            .ledger-resolve-wrap {{ margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; }}
+            .ledger-resolve-wrap {{ margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }}
+
+            /* Trace exception text */
+            .trace-exception {{ color: var(--danger); font-weight: 600; }}
         </style>
         <script>
             const fileCache = {file_cache_json};
@@ -1001,11 +1012,11 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                         if (banner) banner.style.display = 'none';
 
                         // Build a friendly summary — skipped count is expected after a re-run
-                        let msg = `✅ Imported — ${{restored}} decision${{restored !== 1 ? 's' : ''}} restored.`;
+                        let msg = `Imported — ${{restored}} decision${{restored !== 1 ? 's' : ''}} restored.`;
                         if (skipped > 0) msg += ` ${{skipped}} probe${{skipped !== 1 ? 's' : ''}} no longer exist and were skipped.`;
                         showToast(msg, 'success');
                     }} catch(err) {{
-                        showToast('❌ Failed to parse triage-state.json: ' + err.message, 'error');
+                        showToast('Failed to parse triage-state.json: ' + err.message, 'error');
                     }}
                 }};
                 reader.readAsText(file);
@@ -1186,10 +1197,8 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                             const ledgerBadge = document.getElementById(`ledger-badge-${{probeId}}`);
                             if (ledgerBadge) {{
                                 ledgerBadge.className = 'badge';
-                                ledgerBadge.style.backgroundColor = '#e2e8f0';
-                                ledgerBadge.style.color = '#475569';
-                                ledgerBadge.style.border = '1px solid #cbd5e1';
-                                ledgerBadge.innerText = 'Discarded Noise';
+                                ledgerBadge.style.cssText = 'background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1;';
+                                ledgerBadge.innerText = 'Discarded';
                             }}
                             updateLedgerCounts();
                         }}
@@ -1242,15 +1251,15 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                         row.style.opacity = '0.6';
                         const badge = document.getElementById(`ledger-badge-${{probeId}}`);
                         if (badge) {{
-                            badge.className = 'badge';
-                            badge.style.cssText = 'background:var(--success-bg); color:var(--success-text); border:1px solid #a7f3d0;';
-                            badge.innerText = 'Fixed ✓';
+                            badge.className = 'badge badge-success';
+                            badge.style.cssText = '';
+                            badge.innerText = 'Fixed';
                         }}
                     }}
                 }}
 
                 // Flip the button to a "fixed" state
-                btn.innerHTML = '☑ Fixed';
+                btn.innerHTML = 'Fixed';
                 btn.classList.add('is-resolved');
                 btn.disabled = true;
                 btn.onclick = null;
@@ -1401,7 +1410,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                 const pendingAction = needsAction - resolvedCode;
 
                 if (unreviewed === 0 && pendingAction === 0 && resolvedCode > 0) {{
-                    badgeEl.innerHTML = `<span class="status-pill resolved">[ ${{resolvedCode}} Fixed ✓ ]</span>`;
+                    badgeEl.innerHTML = `<span class="status-pill resolved">[ ${{resolvedCode}} Fixed ]</span>`;
                 }} else if (unreviewed === 0 && pendingAction === 0) {{
                     badgeEl.innerHTML = `<span class="status-pill clear">[ Fully Triaged & Clear ]</span>`;
                 }} else if (unreviewed === 0 && pendingAction > 0) {{
@@ -1475,7 +1484,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                 const badgeEl = document.getElementById(`badge-${{testId}}`);
 
                 if (unreviewed === 0 && needsAction === 0 && resolved > 0) {{
-                    badgeEl.innerHTML = `<span class="status-pill resolved">[ ${{resolved}} Fixed ✓ ]</span>`;
+                    badgeEl.innerHTML = `<span class="status-pill resolved">[ ${{resolved}} Fixed ]</span>`;
                 }} else if (unreviewed === 0 && needsAction === 0) {{
                     badgeEl.innerHTML = `<span class="status-pill clear">[ Fully Triaged & Clear ]</span>`;
                 }} else if (unreviewed === 0 && needsAction > 0) {{
@@ -1531,27 +1540,27 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
     </head>
     <body>
         <div class="container">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:32px; gap:16px; flex-wrap:wrap;">
-                <h1 style="margin:0;">Perturbation Analysis Dashboard</h1>
-                <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; gap:16px; flex-wrap:wrap;">
+                <h1>Perturbation Analysis Dashboard</h1>
+                <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
                     <input type="file" id="import-file-input" accept=".json" style="display:none;">
                     <button class="btn-small" onclick="document.getElementById('import-file-input').click()"
                             title="Load a previously exported triage-state.json to restore decisions">
-                        📂 Import Progress
+                        Import Progress
                     </button>
                     <button class="btn-small" onclick="exportState()"
                             title="Download current triage decisions as triage-state.json">
-                        💾 Export Progress
+                        Export Progress
                     </button>
                     <button class="btn-small" style="color: var(--danger); border-color: #fca5a5;"
                             onclick="resetDashboard()"
-                            title="Reset all triage decisions and reload the page to its original state">
-                        ↺ Reset
+                            title="Reset all triage decisions and reload the page">
+                        Reset
                     </button>
                 </div>
             </div>
-            <div id="import-banner" style="margin-bottom:20px; padding:12px 16px; background:#fffbeb; border:1px solid #fde68a; border-left:4px solid var(--warning); border-radius:8px; font-size:13px; color:var(--warning-text); display:flex; align-items:center; justify-content:space-between; gap:12px;">
-                <span>💡 <strong>No saved progress found.</strong> If you have a previous <code>triage-state.json</code>, click <strong>Import Progress</strong> to restore your triage decisions.</span>
+            <div id="import-banner" style="margin-bottom:20px; padding:11px 16px; background:var(--warning-bg); border:1px solid #fde68a; border-left:3px solid var(--warning); border-radius:var(--radius-md); font-size:12px; color:var(--warning-text); display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                <span><strong>No saved progress found.</strong> If you have a previous <code>triage-state.json</code>, click <strong>Import Progress</strong> to restore your triage decisions.</span>
                 <button class="btn-small" style="flex-shrink:0;" onclick="document.getElementById('import-banner').style.display='none'">Dismiss</button>
             </div>
 
@@ -1613,23 +1622,23 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             </div>
 
             <div class="tabs">
-                <div class="tab active" onclick="switchTab('test-view')">Test Quality (Test-Centric)</div>
-                <div class="tab" onclick="switchTab('probe-view')">Vulnerability Ledger (Probe-Centric)</div>
-                <div class="tab" onclick="switchTab('code-view')">Robustness Radar (Code-Centric)</div>
+                <div class="tab active" onclick="switchTab('test-view')">Test Quality</div>
+                <div class="tab" onclick="switchTab('probe-view')">Vulnerability Ledger</div>
+                <div class="tab" onclick="switchTab('code-view')">Robustness Radar</div>
             </div>
 
             <div id="test-view" class="tab-content active">
                 <div class="tab-header">
-                    <h2>Test Triage Dashboard</h2>
-                    <p>Click on any test row to expand and triage unresolved perturbations. Deep-links will open the classes directly in your IDE.</p>
+                    <h2>Test Quality</h2>
+                    <p>Click any test row to expand and triage unresolved perturbations. Deep-links open classes directly in your IDE.</p>
                 </div>
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
                                 <th>Test Name</th>
-                                <th class="text-center" style="width: 160px;">Probes Executed</th>
-                                <th class="text-right" style="width: 280px;">Triage Status</th>
+                                <th class="text-center" style="width: 200px;">Probes Executed</th>
+                                <th class="text-right" style="width: 320px;">Triage Status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1641,26 +1650,26 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
 
             <div id="probe-view" class="tab-content">
                 <div class="tab-header">
-                    <h2>Vulnerability Ledger (Probe-Centric)</h2>
-                    <p>The global status of every injected fault. Discover completely unprotected probes to write brand new unit tests.</p>
+                    <h2>Vulnerability Ledger</h2>
+                    <p>The global status of every injected fault. Discover completely unprotected probes to write new unit tests.</p>
                 </div>
-                <div class="test-details" style="padding: 16px 0;">
+                <div style="padding: 0;">
                     {ledger_html}
                 </div>
             </div>
 
             <div id="code-view" class="tab-content">
                 <div class="tab-header">
-                    <h2>Robustness Radar (Code-Centric)</h2>
-                    <p>Make production code defensive against illegal states. Grouped by target method, strictly showing Execution Crashes (Tier 2).</p>
+                    <h2>Robustness Radar</h2>
+                    <p>Make production code defensive against illegal states. Grouped by target method, showing execution crashes (Tier 2).</p>
                 </div>
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
                                 <th>Target Method</th>
-                                <th class="text-center" style="width: 160px;">Execution Failures</th>
-                                <th class="text-right" style="width: 280px;">Triage Status</th>
+                                <th class="text-center" style="width: 200px;">Execution Failures</th>
+                                <th class="text-right" style="width: 320px;">Triage Status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1675,7 +1684,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
         <div id="sweepModal" class="modal" onclick="if(event.target===this) closeSweepModal()">
             <div class="modal-content" style="width: 560px; height: auto; max-height: 80vh; margin: 6% auto;">
                 <div class="modal-header">
-                    <h2>✨ Sweep Distant Probes</h2>
+                    <h2>Sweep Distant Probes</h2>
                     <span class="close" onclick="closeSweepModal()">&times;</span>
                 </div>
                 <p style="margin: 0 0 6px 0; font-size: 13px; color: var(--text-muted);">
