@@ -1857,7 +1857,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                         <thead>
                             <tr>
                                 <th>Test Name</th>
-                                <th class="text-center" style="width: 100px;">Footprint</th>
+                                <th class="text-center" style="width: 180px;">Footprint</th>
                                 <th class="text-right" style="width: 260px;">Triage Status</th>
                             </tr>
                         </thead>

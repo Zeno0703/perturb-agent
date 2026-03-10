@@ -19,16 +19,12 @@ public class ReturnPerturbationStrategy implements PerturbationStrategy {
                 .visit(Advice.to(ObjectAdvice.class).on(returns(isSubTypeOf(Object.class))));
     }
 
-    public static int resolveProbe(String locationKey, String type) {
-        int probeId = ProbeCatalog.idForLocation(locationKey);
-        if (probeId != -1) {
-            ProbeCatalog.describe(probeId, "Modified " + type + " return value in " + locationKey);
-        }
-        return probeId;
+    public static int resolveProbe(String locationKey) {
+        return ProbeCatalog.idForLocation(locationKey);
     }
 
     public static int perturbInt(int returnValue, String locationKey) {
-        int probeId = resolveProbe(locationKey, "int");
+        int probeId = resolveProbe(locationKey);
         if (probeId != -1) {
             return PerturbationGate.apply(returnValue, probeId);
         }
@@ -36,7 +32,7 @@ public class ReturnPerturbationStrategy implements PerturbationStrategy {
     }
 
     public static boolean perturbBoolean(boolean returnValue, String locationKey) {
-        int probeId = resolveProbe(locationKey, "boolean");
+        int probeId = resolveProbe(locationKey);
         if (probeId != -1) {
             return PerturbationGate.apply(returnValue, probeId);
         }
@@ -45,7 +41,7 @@ public class ReturnPerturbationStrategy implements PerturbationStrategy {
 
     public static Object perturbObject(Object returnValue, String locationKey) {
         if (returnValue != null) {
-            int probeId = resolveProbe(locationKey, "Object");
+            int probeId = resolveProbe(locationKey);
             if (probeId != -1) {
                 return PerturbationGate.apply(returnValue, probeId);
             }

@@ -56,6 +56,35 @@ public class InstrumentationController {
                     return isProductionCode(pd);
                 })
                 .transform((builderInstance, type, loader, module, domain) -> {
+                    for (net.bytebuddy.description.method.MethodDescription.InDefinedShape method : type.getDeclaredMethods()) {
+                        if (method.isConstructor() || method.isAbstract() || method.isNative()) continue;
+
+                        String locationKey = method.toString();
+
+                        if (method.getReturnType().represents(int.class)) {
+                            int id = org.probe.ProbeCatalog.idForLocation(locationKey);
+                            org.probe.ProbeCatalog.describe(id, "Modified int return value in " + locationKey);
+                        } else if (method.getReturnType().represents(boolean.class)) {
+                            int id = org.probe.ProbeCatalog.idForLocation(locationKey);
+                            org.probe.ProbeCatalog.describe(id, "Modified boolean return value in " + locationKey);
+                        } else if (!method.getReturnType().represents(void.class)) {
+                            int id = org.probe.ProbeCatalog.idForLocation(locationKey);
+                            org.probe.ProbeCatalog.describe(id, "Modified Object return value in " + locationKey);
+                        }
+
+                        int argCount = method.getParameters().size();
+                        for (int i = 0; i < argCount; i++) {
+                            String argKey = locationKey + ":arg:" + i;
+                            int id = org.probe.ProbeCatalog.idForLocation(argKey);
+
+                            String typeName = "Object";
+                            if (method.getParameters().get(i).getType().represents(int.class)) typeName = "Integer";
+                            else if (method.getParameters().get(i).getType().represents(boolean.class)) typeName = "boolean";
+
+                            org.probe.ProbeCatalog.describe(id, "Modified " + typeName + " argument at index " + i + " in " + locationKey);
+                        }
+                    }
+
                     DynamicType.Builder<?> modifiedBuilder = builderInstance;
                     for (PerturbationStrategy strategy : strategies) {
                         modifiedBuilder = strategy.apply(modifiedBuilder);

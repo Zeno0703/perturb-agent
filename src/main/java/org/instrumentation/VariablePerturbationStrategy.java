@@ -24,22 +24,9 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
         );
     }
 
-    public static int resolveAndApply(int value, String methodName, int varIndex) {
-        String locationKey = methodName + ":var:" + varIndex;
-        int probeId = ProbeCatalog.idForLocation(locationKey);
-
-        if (probeId != -1) {
-            ProbeCatalog.describe(probeId, "Modified integer local variable at index " + varIndex + " in " + methodName);
-            return PerturbationGate.apply(value, probeId);
-        }
-        return value;
-    }
-
     public static class VariableAssignmentPerturber implements AsmVisitorWrapper.ForDeclaredMethods.MethodVisitorWrapper {
         @Override
-        public MethodVisitor wrap(TypeDescription instrumentedType, MethodDescription instrumentedMethod,
-                                  MethodVisitor methodVisitor, Implementation.Context implementationContext,
-                                  TypePool typePool, int writerFlags, int readerFlags) {
+        public MethodVisitor wrap(TypeDescription instrumentedType, MethodDescription instrumentedMethod, MethodVisitor methodVisitor, Implementation.Context implementationContext, TypePool typePool, int writerFlags, int readerFlags) {
             return new VariablePerturbationVisitor(Opcodes.ASM9, methodVisitor, instrumentedMethod.toString());
         }
     }
@@ -55,33 +42,27 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
         @Override
         public void visitVarInsn(int opcode, int varIndex) {
             if (opcode == Opcodes.ISTORE) {
-                super.visitLdcInsn(methodName);
-                super.visitLdcInsn(varIndex);
-                super.visitMethodInsn(
-                        Opcodes.INVOKESTATIC,
-                        "org/instrumentation/VariablePerturbationStrategy",
-                        "resolveAndApply",
-                        "(ILjava/lang/String;I)I",
-                        false
-                );
+                String locationKey = methodName + ":var:" + varIndex;
+                int probeId = ProbeCatalog.idForLocation(locationKey);
+                ProbeCatalog.describe(probeId, "Modified integer local variable at index " + varIndex + " in " + methodName);
+
+                super.visitLdcInsn(probeId);
+                super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "apply", "(II)I", false);
             }
             super.visitVarInsn(opcode, varIndex);
         }
 
         @Override
         public void visitIincInsn(int varIndex, int increment) {
+            String locationKey = methodName + ":var:" + varIndex;
+            int probeId = ProbeCatalog.idForLocation(locationKey);
+            ProbeCatalog.describe(probeId, "Modified integer local variable at index " + varIndex + " in " + methodName);
+
             super.visitVarInsn(Opcodes.ILOAD, varIndex);
             super.visitIntInsn(Opcodes.SIPUSH, increment);
             super.visitInsn(Opcodes.IADD);
-            super.visitLdcInsn(methodName);
-            super.visitLdcInsn(varIndex);
-            super.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/instrumentation/VariablePerturbationStrategy",
-                    "resolveAndApply",
-                    "(ILjava/lang/String;I)I",
-                    false
-            );
+            super.visitLdcInsn(probeId);
+            super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "apply", "(II)I", false);
             super.visitVarInsn(Opcodes.ISTORE, varIndex);
         }
     }

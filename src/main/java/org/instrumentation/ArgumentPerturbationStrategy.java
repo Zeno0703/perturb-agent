@@ -50,7 +50,6 @@ public class ArgumentPerturbationStrategy implements PerturbationStrategy {
                     modifiedArgs[i] = PerturbationGate.apply(currentArg, probeId);
                 }
 
-                ProbeCatalog.describe(probeId, "Modified " + typeName + " argument at index " + i + " in " + locationKey);
                 writeBack = true;
             }
         }
