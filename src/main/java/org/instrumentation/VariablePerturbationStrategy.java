@@ -27,6 +27,18 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
     public static class VariableAssignmentPerturber implements AsmVisitorWrapper.ForDeclaredMethods.MethodVisitorWrapper {
         @Override
         public MethodVisitor wrap(TypeDescription instrumentedType, MethodDescription instrumentedMethod, MethodVisitor methodVisitor, Implementation.Context implementationContext, TypePool typePool, int writerFlags, int readerFlags) {
+
+            if (instrumentedMethod.isSynthetic() ||
+                    instrumentedMethod.isBridge() ||
+                    instrumentedMethod.getName().contains("$")) {
+                return methodVisitor;
+            }
+
+            if (instrumentedType.isEnum() &&
+                    (instrumentedMethod.getName().equals("values") || instrumentedMethod.getName().equals("valueOf"))) {
+                return methodVisitor;
+            }
+
             return new VariablePerturbationVisitor(Opcodes.ASM9, methodVisitor, instrumentedMethod.toString());
         }
     }

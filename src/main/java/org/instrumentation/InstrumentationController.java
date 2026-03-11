@@ -57,7 +57,9 @@ public class InstrumentationController {
                 })
                 .transform((builderInstance, type, loader, module, domain) -> {
                     for (net.bytebuddy.description.method.MethodDescription.InDefinedShape method : type.getDeclaredMethods()) {
-                        if (method.isConstructor() || method.isAbstract() || method.isNative()) continue;
+                        if (method.isConstructor() || method.isAbstract() || method.isNative() || method.isTypeInitializer()) continue;
+                        if (method.isSynthetic() || method.isBridge() || method.getName().contains("$")) continue;
+                        if (type.isEnum() && (method.getName().equals("values") || method.getName().equals("valueOf"))) continue;
 
                         String locationKey = method.toString();
 
