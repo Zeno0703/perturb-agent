@@ -93,7 +93,32 @@ def discovery(project_dir, agent_jar, target_package, log_file):
         sys.exit(f"Discovery failed:\n{stderr[-1000:]}")
 
     raw_probes = read_probes(project_dir)
-    probes = {pid: desc for pid, desc in raw_probes.items() if parse_probe(desc)[1] != "unknown"}
+
+    # Filter ghost probes on a per-method basis, mirroring the Java agent's
+    # per-method LVT logic in VariablePerturbationStrategy:
+    #   - If a method has at least one properly-named probe, any JVM-slot
+    #     fallback probes in that same method are compiler ghosts → drop them.
+    #   - If a method has ONLY JVM-slot probes (LVT was blocked/stripped),
+    #     keep them — they are the only information available for that method.
+    # Probes whose FQCN cannot be parsed at all are always dropped.
+    def _method_key(d):
+        _, fq, mth = parse_probe(d)
+        return f"{fq}#{mth}"
+
+    is_jvm_slot = {
+        pid: bool(re.search(r'\(JVM slot \d+\)', desc))
+        for pid, desc in raw_probes.items()
+    }
+    methods_with_named = {
+        _method_key(desc)
+        for pid, desc in raw_probes.items()
+        if not is_jvm_slot[pid] and parse_probe(desc)[1] != "unknown"
+    }
+    probes = {
+        pid: desc for pid, desc in raw_probes.items()
+        if parse_probe(desc)[1] != "unknown"
+        and not (is_jvm_slot[pid] and _method_key(desc) in methods_with_named)
+    }
 
     if not probes:
         sys.exit("No probes found.")
