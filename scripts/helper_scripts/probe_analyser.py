@@ -18,6 +18,7 @@ except ModuleNotFoundError:
 def parse_probe(desc):
     """
     Robustly extract (modification_type, fqcn, method_name) from a probe description.
+    Handles standard methods and constructors seamlessly.
     """
     parts = desc.rsplit(" in ", 1)
     if len(parts) != 2:
@@ -26,17 +27,36 @@ def parse_probe(desc):
     mod = parts[0].replace("Modified ", "").strip()
     sig = parts[1].strip()
 
-    cm_match = re.search(r'([\w\.\$]+)\.([\w\$<>\-]+)\(', sig)
-    if cm_match:
-        return mod, cm_match.group(1), cm_match.group(2)
+    prefix = sig.split('(')[0].strip()
+    tokens = prefix.split()
+    if not tokens:
+        return mod, "unknown", "unknown"
 
-    constructor_match = re.search(r'([\w\.\$]+)\(', sig)
-    if constructor_match:
-        fqcn = constructor_match.group(1)
-        return mod, fqcn, fqcn.split('.')[-1]
+    fq_path = tokens[-1]
+    segments = fq_path.split('.')
+    if len(segments) < 2:
+        return mod, fq_path, "unknown"
 
-    return mod, "unknown", "unknown"
+    is_constructor = False
+    if len(tokens) == 1:
+        is_constructor = True
+    elif tokens[-2] in ('public', 'protected', 'private'):
+        is_constructor = True
+    elif segments[-1] and segments[-1][0].isupper():
+        is_constructor = True
 
+    if is_constructor:
+        fqcn = fq_path
+        method_name = segments[-1]
+    else:
+        fqcn = '.'.join(segments[:-1])
+        method_name = segments[-1]
+
+    import re
+    fqcn = re.sub(r'<.*?>', '', fqcn)
+    method_name = re.sub(r'<.*?>', '', method_name)
+
+    return mod, fqcn, method_name
 
 def get_warning(mod, method_name):
     """

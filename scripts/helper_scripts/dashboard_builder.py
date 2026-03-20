@@ -64,6 +64,8 @@ def build_action_trace(p):
 
 def build_ledger_row(p, project_dir, probe_status=None):
     class_name = p['fqcn'].split('.')[-1] if p['fqcn'] != 'unknown' else 'Unknown'
+    display_name = f"{p['method']}()" if class_name == p['method'] else f"{class_name}.{p['method']}()"
+
     hit_count = len(p['tests'])
     ps = probe_status or (
         'Survived' if p.get('tier') == 1 else
@@ -111,7 +113,7 @@ def build_ledger_row(p, project_dir, probe_status=None):
     return f"""
     <tr id='ledger-row-{p['id']}' class="clickable-row" style="{row_style}" onclick="toggleRow(event, 'ledger-desc-{p['id']}')">
         <td><div class="scrollable-text font-medium code-font">#{p['id']}</div></td>
-        <td><div class="scrollable-text code-font">{class_name}.{p['method']}()</div></td>
+        <td><div class="scrollable-text code-font">{display_name}</div></td>
         <td><div class="scrollable-text">{escape_html(p['desc'])}</div></td>
         <td class="text-center"><div class="scrollable-text" style="text-align:center;">{hit_count} Test{'s' if hit_count != 1 else ''}</div></td>
         <td class="text-right"><div class="scrollable-text" style="text-align:right;"><span id="ledger-badge-{p['id']}" class="badge {badge_class}" style="{badge_style}">{status_text}</span></div></td>
@@ -523,6 +525,8 @@ def build_code_rows(dashboard_methods, master_probes, project_dir):
         c_name = m_fqcn.split('.')[-1] if m_fqcn != 'unknown' else 'Unknown'
         total_t2_unreviewed += len(stats['probes'])
 
+        display_name = f"{m_name}()" if c_name == m_name else f"{c_name}.{m_name}()"
+
         inner_code_html = f"""
         <div class='details-section'>
             <div class='details-title text-warning accordion-header' onclick="toggleAccordion('content-code-t2-{safe_m_id}', 'icon-code-t2-{safe_m_id}')">
@@ -603,7 +607,7 @@ def build_code_rows(dashboard_methods, master_probes, project_dir):
         <tr class="clickable-row" onclick="toggleRow(event, 'code-desc-{safe_m_id}')">
             <td class="font-medium text-main">
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 20px;">
-                    <div class="scrollable-text code-font">{c_name}.{m_name}()</div>
+                    <div class="scrollable-text code-font">{display_name}</div>
                     <span class="expand-hint" style="flex-shrink: 0;">Show details ▼</span>
                 </div>
             </td>

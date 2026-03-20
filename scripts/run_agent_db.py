@@ -92,19 +92,34 @@ def parse_probe_desc(desc):
 
     operator = f"{loc_abbr}-{type_abbr}"
 
-    # Extract FQCN and method name from the signature
-    cm_match = re.search(r'([\w\.\$]+)\.([\w\$<>\-]+)\(', sig)
-    if cm_match:
-        fqcn = cm_match.group(1)
-        method = cm_match.group(2)
+    # Extract FQCN and method name smartly
+    prefix = sig.split('(')[0].strip()
+    tokens = prefix.split()
+    if not tokens:
+        return modifier, location, operator, "Unknown", "Unknown"
+
+    fq_path = tokens[-1]
+    segments = fq_path.split('.')
+    if len(segments) < 2:
+        return modifier, location, operator, fq_path, "Unknown"
+
+    is_constructor = False
+    if len(tokens) == 1:
+        is_constructor = True
+    elif tokens[-2] in ('public', 'protected', 'private'):
+        is_constructor = True
+    elif segments[-1] and segments[-1][0].isupper():
+        is_constructor = True
+
+    if is_constructor:
+        fqcn = fq_path
+        method = segments[-1]
     else:
-        constructor_match = re.search(r'([\w\.\$]+)\(', sig)
-        if constructor_match:
-            fqcn = constructor_match.group(1)
-            method = fqcn.split('.')[-1]
-        else:
-            fqcn = "Unknown"
-            method = "Unknown"
+        fqcn = '.'.join(segments[:-1])
+        method = segments[-1]
+
+    fqcn = re.sub(r'<.*?>', '', fqcn)
+    method = re.sub(r'<.*?>', '', method)
 
     return modifier, location, operator, fqcn, method
 

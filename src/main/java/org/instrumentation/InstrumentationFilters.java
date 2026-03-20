@@ -33,7 +33,7 @@ class InstrumentationFilters {
     }
 
     static boolean isTargetType(TypeDescription typeDesc, ProtectionDomain pd) {
-        if (typeDesc.isInterface() || typeDesc.isAnnotation()) return false;
+        if (typeDesc.isAnnotation()) return false;
         if (!TARGET_PACKAGE.isEmpty() && !typeDesc.getName().startsWith(TARGET_PACKAGE)) return false;
         return isProductionCode(pd);
     }
