@@ -297,22 +297,22 @@ def _build_probe_json_record(p, global_tier3_probes, project_dir):
         bucket = 't1'
 
     rec = {
-        'id':         p['id'],
-        'desc':       p['desc'],
-        'tier':       p['tier'],
-        'bucket':     bucket,
-        'fqcn':       fqcn,
-        'method':     m_name,
-        'mod':        mod,
-        'actions':    p.get('actions', []),
+        'id': p['id'],
+        'desc': p['desc'],
+        'tier': p['tier'],
+        'bucket': bucket,
+        'fqcn': fqcn,
+        'method': m_name,
+        'mod': mod,
+        'actions': p.get('actions', []),
         'exceptions': p.get('exceptions', []),
         'targetLink': to_idea_link(project_dir, fqcn, is_test=False),
-        'warning':    get_warning(mod, m_name),
+        'warning': get_warning(mod, m_name),
     }
     if bucket == 'covered':
         saviour = global_tier3_probes.get(p['id'], 'Another Test')
-        rec['saviour']       = saviour
-        rec['saviourClass']  = saviour.split('#')[0]
+        rec['saviour'] = saviour
+        rec['saviourClass'] = saviour.split('#')[0]
         rec['saviourMethod'] = saviour.split('#')[1] if '#' in saviour else 'unknown'
     return rec
 
@@ -339,9 +339,9 @@ def build_test_rows(test_stats, test_summary, global_tier3_probes, project_dir):
             _build_probe_json_record(p, global_tier3_probes, project_dir)
             for p in stats['probes']
         ]
-        t1_count      = sum(1 for r in probe_records if r['bucket'] == 't1')
-        t2_count      = sum(1 for r in probe_records if r['bucket'] == 't2')
-        t3_count      = sum(1 for r in probe_records if r['bucket'] == 't3')
+        t1_count = sum(1 for r in probe_records if r['bucket'] == 't1')
+        t2_count = sum(1 for r in probe_records if r['bucket'] == 't2')
+        t3_count = sum(1 for r in probe_records if r['bucket'] == 't3')
         covered_count = sum(1 for r in probe_records if r['bucket'] == 'covered')
         total_footprint = t1_count + t2_count + t3_count + covered_count
         if total_footprint == 0:
@@ -352,29 +352,29 @@ def build_test_rows(test_stats, test_summary, global_tier3_probes, project_dir):
 
     valid_sorted_tests.sort(key=test_sort_key)
 
-    total_tests          = len(valid_sorted_tests)
-    total_t1_unreviewed  = 0
-    fully_triaged_tests  = 0
-    test_rows            = ""
+    total_tests = len(valid_sorted_tests)
+    total_t1_unreviewed = 0
+    fully_triaged_tests = 0
+    test_rows = ""
 
     for (test_name, stats, probe_records,
          t1_count, t2_count, t3_count, covered_count, total_footprint) in valid_sorted_tests:
 
-        safe_id          = sanitize_id(test_name)
+        safe_id = sanitize_id(test_name)
         unreviewed_count = t1_count
         total_t1_unreviewed += unreviewed_count
 
-        ts         = test_summary.get(test_name, {'clean': 0, 'dirty': 0, 'survived': 0})
-        n_clean    = ts['clean']
-        n_dirty    = ts['dirty']
+        ts = test_summary.get(test_name, {'clean': 0, 'dirty': 0, 'survived': 0})
+        n_clean = ts['clean']
+        n_dirty = ts['dirty']
         n_survived = ts['survived']
         is_vulnerable = n_survived > 0
 
         if unreviewed_count == 0:
-            status_pill = '<span class="status-pill clear">[ Fully Triaged ]</span>'
+            status_pill = '<span class="status-pill clear">[ Fully Triaged & Clear ]</span>'
             fully_triaged_tests += 1
         else:
-            status_pill = f'<span class="status-pill {"action" if is_vulnerable else "pending"}">[ {unreviewed_count} Unreviewed ]</span>'
+            status_pill = f'<span class="status-pill action">[ {unreviewed_count} Unreviewed ]</span>'
 
         _dot = "display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:700;flex-shrink:0;"
         footprint_badges = ""
@@ -387,12 +387,12 @@ def build_test_rows(test_stats, test_summary, global_tier3_probes, project_dir):
         if not footprint_badges:
             footprint_badges = f'<span style="{_dot}background:#f1f5f9;color:var(--text-muted);border:1px solid var(--border-strong);" title="Total probes">{total_footprint}</span>'
 
-        test_class  = test_name.split('#')[0]
+        test_class = test_name.split('#')[0]
         test_method = test_name.split('#')[1] if '#' in test_name else "unknown"
-        test_link   = to_idea_link(project_dir, test_class, is_test=True)
+        test_link = to_idea_link(project_dir, test_class, is_test=True)
 
         display_test_class = test_class.split('.')[-1]
-        display_test_name  = f"{display_test_class}.{test_method}()" if test_method != "unknown" else display_test_class
+        display_test_name = f"{display_test_class}.{test_method}()" if test_method != "unknown" else display_test_class
 
         # Serialise probe data — JSON embedded in a double-quoted HTML attribute
         probes_json = json.dumps(probe_records, ensure_ascii=True)
@@ -436,23 +436,22 @@ def build_test_rows(test_stats, test_summary, global_tier3_probes, project_dir):
         inner_html += f"""
         <div class='details-section' id='cascaded-section-{safe_id}' style='display:none;'>
             <div class='details-title text-orange accordion-header' onclick="toggleAccordion('content-cascaded-{safe_id}','icon-cascaded-{safe_id}')">
-                <span><span id='icon-cascaded-{safe_id}' class='accordion-icon'>▶</span> Also Needs Fixing (Seen Elsewhere) <span id='count-cascaded-{safe_id}'>[0 Probes]</span></span>
+                <span><span id='icon-cascaded-{safe_id}' class='accordion-icon'>▶</span> Marked by another test, review needed <span id='count-cascaded-{safe_id}'>[0 Probes]</span></span>
             </div>
             <div id='content-cascaded-{safe_id}' style='display:none;'>
                 <ul id='list-cascaded-{safe_id}' class='details-list'></ul>
             </div>
         </div>"""
 
-        if covered_count:
-            inner_html += f"""
-            <div class='details-section'>
-                <div class='details-title text-info accordion-header' onclick="toggleAccordion('content-tc-{safe_id}','icon-tc-{safe_id}')">
-                    <span><span id='icon-tc-{safe_id}' class='accordion-icon'>▶</span> Covered by Another Test <span id='count-tc-{safe_id}'>[{covered_count} Probes]</span></span>
-                </div>
-                <div id='content-tc-{safe_id}' style='display:none;'>
-                    <ul class='details-list' id='list-tc-{safe_id}'></ul>
-                </div>
-            </div>"""
+        inner_html += f"""
+        <div class='details-section' id='tc-section-{safe_id}' style='display:{"block" if covered_count else "none"};'>
+            <div class='details-title text-info accordion-header' onclick="toggleAccordion('content-tc-{safe_id}','icon-tc-{safe_id}')">
+                <span><span id='icon-tc-{safe_id}' class='accordion-icon'>▶</span> Caught/Fixed by another test <span id='count-tc-{safe_id}'>[{covered_count} Probes]</span></span>
+            </div>
+            <div id='content-tc-{safe_id}' style='display:none;'>
+                <ul class='details-list' id='list-tc-{safe_id}'></ul>
+            </div>
+        </div>"""
 
         if t3_count:
             inner_html += f"""
@@ -545,22 +544,30 @@ def build_code_rows(dashboard_methods, master_probes, project_dir):
             if mp_data:
                 for t_name, outcome in mp_data['test_outcomes'].items():
                     if outcome == 'clean':
-                        color = 'var(--success-text)'; bg = 'var(--success-bg)'; label = 'Clean Kill'
+                        color = 'var(--success-text)';
+                        bg = 'var(--success-bg)';
+                        label = 'Clean Kill'
                         n_clean += 1
                     elif outcome == 'dirty':
-                        color = 'var(--warning-text)'; bg = 'var(--warning-bg)'; label = 'Exception'
+                        color = 'var(--warning-text)';
+                        bg = 'var(--warning-bg)';
+                        label = 'Exception'
                         n_dirty += 1
                     elif outcome == 'timeout':
-                        color = 'var(--warning-text)'; bg = 'var(--warning-bg)'; label = 'TIMEOUT'
+                        color = 'var(--warning-text)';
+                        bg = 'var(--warning-bg)';
+                        label = 'TIMEOUT'
                         n_dirty += 1
                     else:
-                        color = 'var(--danger-text)'; bg = 'var(--danger-bg)'; label = 'Survived'
+                        color = 'var(--danger-text)';
+                        bg = 'var(--danger-bg)';
+                        label = 'Survived'
                         n_survived += 1
                     test_items += f"<li style='margin-bottom:3px; display:flex; align-items:center; gap:8px;'><span style='font-size:11px; font-weight:600; color:{color}; background:{bg}; padding:2px 7px; border-radius:9999px; flex-shrink:0;'>{label}</span><span class='code-font' style='font-size:12px; color:var(--text-muted);'>{escape_html(t_name)}</span></li>"
             if not test_items:
                 test_items = "<li style='color:var(--text-muted); font-style:italic;'>No outcomes recorded.</li>"
             total_witnesses = n_clean + n_dirty + n_survived
-            summary = f"Hit by {total_witnesses} test{'s' if total_witnesses!=1 else ''}. <strong style='color:var(--success-text);'>{n_clean} clean</strong>, <strong style='color:var(--warning-text);'>{n_dirty} crashed</strong>, <strong style='color:var(--danger-text);'>{n_survived} missed</strong>."
+            summary = f"Hit by {total_witnesses} test{'s' if total_witnesses != 1 else ''}. <strong style='color:var(--success-text);'>{n_clean} clean</strong>, <strong style='color:var(--warning-text);'>{n_dirty} crashed</strong>, <strong style='color:var(--danger-text);'>{n_survived} missed</strong>."
 
             inner_code_html += f"""
             <li id='code-probe-{p['id']}' data-state='unreviewed' class='probe-item' style='border-left-color: var(--warning);'>
@@ -613,7 +620,7 @@ def build_code_rows(dashboard_methods, master_probes, project_dir):
             </td>
             <td class="text-center"><div class="scrollable-text font-medium text-warning" style="text-align:center;">{len(stats['probes'])} Crashes</div></td>
             <td id="code-badge-{safe_m_id}" class="text-right"><div class="scrollable-text" style="text-align:right;">
-                <span class="status-pill pending">[ {len(stats['probes'])} Unreviewed ]</span>
+                <span class="status-pill action">[ {len(stats['probes'])} Unreviewed ]</span>
             </div></td>
         </tr>
         <tr id="code-desc-{safe_m_id}" class="details-row" style="display: none;">
@@ -858,12 +865,12 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
 
             .trace-exception {{ color: var(--danger); font-weight: 600; }}
         </style>
-        
+
         <script src="source_cache.js"></script>
-        
+
         <script>
             const fileCache = window.PERTURB_FILE_CACHE || {{}};
-            
+
             window.initialT1Count = {total_t1_unreviewed};
             window.initialT2Count = {total_t2_unreviewed};
             window.totalTestCount = {total_tests};
@@ -902,7 +909,11 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                 li.dataset.tier       = rec.tier;
                 li.dataset.state      = decision;
                 li.dataset.targetFqcn = rec.fqcn || '';
-                if (resolved) {{ li.dataset.resolved = 'true'; li.classList.add('resolved-item'); }}
+
+                if (resolved) {{ 
+                    li.dataset.resolved = 'true'; 
+                    li.classList.add('resolved-item'); 
+                }}
 
                 const borderCol = {{t1:'var(--danger)',t2:'var(--warning)',covered:'var(--info)',t3:'var(--success)'}}[rec.bucket] || 'var(--border-strong)';
                 li.style.borderLeftColor = borderCol;
@@ -992,22 +1003,30 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                     const stEntry  = _tsGet(rec.id, safeId);
                     const decision = stEntry ? stEntry.decision : 'unreviewed';
                     const tag      = stEntry ? stEntry.tag      : null;
+                    const resolved = stEntry ? !!stEntry.resolved : false;
                     const li       = _buildProbeItem(rec, safeId, testClass, testMethod, testLink);
 
                     if (decision === 'noise' || decision === 'equivalent') {{
                         if (lists.noise) lists.noise.appendChild(li);
                     }} else if (decision === 'action' && rec.bucket === 't1' && (tag||'').includes('(Cascaded)')) {{
-                        if (lists.cascaded) lists.cascaded.appendChild(li);
+                        if (resolved && lists.covered) {{
+                            lists.covered.appendChild(li);
+                        }} else if (lists.cascaded) {{
+                            lists.cascaded.appendChild(li);
+                        }}
                     }} else {{
                         const target = lists[rec.bucket];
                         if (target) target.appendChild(li);
                     }}
                 }});
 
-                [['noise-section','noise'],['cascaded-section','cascaded']].forEach(([secKey,listKey]) => {{
+                [['noise-section','noise'],['cascaded-section','cascaded'],['tc-section','covered']].forEach(([secKey,listKey]) => {{
                     const sec  = document.getElementById(`${{secKey}}-${{safeId}}`);
                     const list = lists[listKey];
-                    if (sec && list && list.children.length) sec.style.display = 'block';
+                    if (sec && list) {{
+                        const visibleCount = Array.from(list.children).filter(c => c.style.display !== 'none').length;
+                        if (visibleCount > 0) sec.style.display = 'block';
+                    }}
                 }});
 
                 detailRow.dataset.rendered = 'true';
@@ -1021,7 +1040,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                     const ul = document.getElementById(`list-${{sfx}}-${{safeId}}`);
                     if (ul) ul.innerHTML = '';
                 }});
-                ['noise-section','cascaded-section'].forEach(sec => {{
+                ['noise-section','cascaded-section','tc-section'].forEach(sec => {{
                     const el = document.getElementById(`${{sec}}-${{safeId}}`);
                     if (el) el.style.display = 'none';
                 }});
@@ -1319,13 +1338,42 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                     const testId = context.slice(5);
                     Object.keys(_triageState[probeId] || {{}}).forEach(tid => {{
                         const e = _triageState[probeId][tid];
-                        if (e && e.decision === 'action') _tsSet(probeId, tid, {{ resolved: true }});
+                        if (e && e.decision === 'action') {{
+                            _tsSet(probeId, tid, {{ resolved: true }});
+                            _replayBadge(tid); // Force the badge to jump globally, even if the row is closed
+                        }}
                     }});
                     document.querySelectorAll(`li[data-probe-id="${{probeId}}"]`).forEach(el => {{
                         if (el.id.startsWith('code-probe-')) return;
                         el.setAttribute('data-resolved','true'); el.classList.add('resolved-item');
+
                         const tid2 = el.getAttribute('data-test-id');
-                        if (tid2) {{ _replayBadge(tid2); flipBtn(document.querySelector(`button[data-resolve-test="${{probeId}}-${{tid2}}"]`)); }}
+
+                        // Physically move the item to the "tc" bucket
+                        if (el.classList.contains('cascaded-item')) {{
+                            el.classList.remove('cascaded-item');
+                            const targetList = document.getElementById(`list-tc-${{tid2}}`);
+                            if (targetList) targetList.appendChild(el);
+                        }}
+
+                        if (tid2) {{ 
+                            _replayBadge(tid2); 
+                            flipBtn(document.querySelector(`button[data-resolve-test="${{probeId}}-${{tid2}}"]`)); 
+                            _syncAccordionCounts(tid2);
+
+                            // Recheck the empty states for the affected sections
+                            ['cascaded-section', 'tc-section'].forEach(secId => {{
+                                const sec = document.getElementById(`${{secId}}-${{tid2}}`);
+                                if (sec) {{
+                                    const listId = secId === 'tc-section' ? 'tc' : 'cascaded';
+                                    const list = document.getElementById(`list-${{listId}}-${{tid2}}`);
+                                    if (list) {{
+                                        const visibleCount = Array.from(list.children).filter(c => c.style.display !== 'none').length;
+                                        sec.style.display = visibleCount > 0 ? 'block' : 'none';
+                                    }}
+                                }}
+                            }});
+                        }}
                     }});
                     const ledgerRow = document.getElementById(`ledger-row-${{probeId}}`);
                     if (ledgerRow && ledgerRow.getAttribute('data-resolved') !== 'true') {{
@@ -1359,24 +1407,46 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             function _replayBadge(safeId) {{
                 const detailRow = document.getElementById(`desc-${{safeId}}`);
                 if (!detailRow) return;
+
                 let probes;
                 try {{ probes = JSON.parse(detailRow.dataset.probes || '[]'); }} catch(e) {{ return; }}
                 const t1Ids = probes.filter(r => r.bucket === 't1').map(r => r.id);
-                let unreviewed = 0, needsAction = 0, resolved = 0;
+
+                // If there are no vulnerable probes, it's green.
+                if (t1Ids.length === 0) {{
+                    const badgeEl = document.getElementById(`badge-${{safeId}}`);
+                    if (badgeEl) badgeEl.innerHTML = `<span class="status-pill clear">[ Fully Triaged ]</span>`;
+                    return;
+                }}
+
+                let unreviewed = 0, needsAction = 0;
                 t1Ids.forEach(pid => {{
                     const e = _tsGet(pid, safeId);
                     const d = e ? e.decision : 'unreviewed';
-                    if (!d || d === 'unreviewed') unreviewed++;
-                    else if (d === 'action') {{ if (e && e.resolved) resolved++; else needsAction++; }}
+
+                    if (!d || d === 'unreviewed') {{
+                        unreviewed++;
+                    }} else if (d === 'action' && (!e || !e.resolved)) {{
+                        needsAction++;
+                    }}
                 }});
+
                 const badgeEl = document.getElementById(`badge-${{safeId}}`);
                 if (!badgeEl) return;
+
                 let html;
-                if      (unreviewed===0 && needsAction===0 && resolved>0) html = `<span class="status-pill resolved">[ ${{resolved}} Fixed ]</span>`;
-                else if (unreviewed===0 && needsAction===0)                html = `<span class="status-pill clear">[ Fully Triaged & Clear ]</span>`;
-                else if (unreviewed===0 && needsAction>0)                  html = `<span class="status-pill action">[ Fully Triaged | ${{needsAction}} Need Action ]</span>`;
-                else if (unreviewed>0   && needsAction>0)                  html = `<span class="status-pill mid">[ ${{unreviewed}} Unreviewed | ${{needsAction}} Need Action ]</span>`;
-                else html = `<span class="status-pill ${{t1Ids.length>0?'action':'pending'}}">[ ${{unreviewed}} Unreviewed ]</span>`;
+                if (unreviewed === 0 && needsAction === 0) {{
+                    html = `<span class="status-pill clear">[ Fully Triaged & Clear ]</span>`;
+                }} else if (needsAction > 0) {{
+                    if (unreviewed > 0) {{
+                        html = `<span class="status-pill mid">[ ${{unreviewed}} Unreviewed | ${{needsAction}} Need Action ]</span>`;
+                    }} else {{
+                        html = `<span class="status-pill mid">[ Fully Triaged | ${{needsAction}} Need Action ]</span>`;
+                    }}
+                }} else {{
+                    html = `<span class="status-pill action">[ ${{unreviewed}} Unreviewed ]</span>`;
+                }}
+
                 badgeEl.innerHTML = html;
             }}
 
@@ -1389,7 +1459,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                     let probes;
                     try {{ probes = JSON.parse(detailRow.dataset.probes || '[]'); }} catch(e) {{ return; }}
                     const t1Ids = probes.filter(r => r.bucket === 't1').map(r => r.id);
-                    if (t1Ids.length === 0) return;
+                    if (t1Ids.length === 0) {{ fullyTriaged++; return; }}
                     let unreviewed = 0, action = 0, noise = 0;
                     t1Ids.forEach(pid => {{
                         const e = _tsGet(pid, safeId);
@@ -1415,7 +1485,10 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                  ['list-tc','count-tc'],['list-cascaded','count-cascaded'],['list-noise','count-noise']].forEach(([lp,cp]) => {{
                     const ul  = document.getElementById(`${{lp}}-${{safeId}}`);
                     const hdr = document.getElementById(`${{cp}}-${{safeId}}`);
-                    if (ul && hdr) hdr.innerText = `[${{ul.children.length}} Probes]`;
+                    if (ul && hdr) {{
+                        const visibleCount = Array.from(ul.children).filter(c => c.style.display !== 'none').length;
+                        hdr.innerText = `[${{visibleCount}} Probes]`;
+                    }}
                 }});
             }}
 
@@ -1560,20 +1633,43 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             function updateCodeBadge(methodId) {{
                 const mc = document.getElementById(`code-desc-${{methodId}}`);
                 if(!mc) return;
+
+                const totalProbes = mc.querySelectorAll('li.probe-item').length;
+                if (totalProbes === 0) return;
+
                 const unreviewed  = mc.querySelectorAll('li.probe-item[data-state="unreviewed"]').length;
                 const needsAction = mc.querySelectorAll('li.probe-item[data-state="action-code"]:not([data-resolved="true"])').length;
-                const resolvedCode= mc.querySelectorAll('li.probe-item[data-state="action-code"][data-resolved="true"]').length;
+
                 const badgeEl = document.getElementById(`code-badge-${{methodId}}`);
-                if (!badgeEl) return;
-                if      (unreviewed===0 && needsAction===0 && resolvedCode>0) badgeEl.innerHTML = `<span class="status-pill resolved">[ ${{resolvedCode}} Fixed ]</span>`;
-                else if (unreviewed===0 && needsAction===0)                   badgeEl.innerHTML = `<span class="status-pill clear">[ Fully Triaged & Clear ]</span>`;
-                else if (unreviewed===0 && needsAction>0)                     badgeEl.innerHTML = `<span class="status-pill action">[ Fully Triaged | ${{needsAction}} Need Action ]</span>`;
-                else if (unreviewed>0   && needsAction>0)                     badgeEl.innerHTML = `<span class="status-pill mid">[ ${{unreviewed}} Unreviewed | ${{needsAction}} Need Action ]</span>`;
-                else                                                           badgeEl.innerHTML = `<span class="status-pill pending">[ ${{unreviewed}} Unreviewed ]</span>`;
+                if (badgeEl) {{
+                    let html;
+                    if (unreviewed === 0 && needsAction === 0) {{
+                        html = `<span class="status-pill clear">[ Fully Triaged & Clear ]</span>`;
+                    }} else if (needsAction > 0) {{
+                        if (unreviewed > 0) {{
+                            html = `<span class="status-pill mid">[ ${{unreviewed}} Unreviewed | ${{needsAction}} Need Action ]</span>`;
+                        }} else {{
+                            html = `<span class="status-pill mid">[ Fully Triaged | ${{needsAction}} Need Action ]</span>`;
+                        }}
+                    }} else {{
+                        html = `<span class="status-pill action">[ ${{unreviewed}} Unreviewed ]</span>`;
+                    }}
+                    badgeEl.innerHTML = html;
+                }}
+
+                // Update Global Code-Centric Metrics robustly
                 const t2UnreviewedGlobal = document.querySelectorAll('#code-view li.probe-item[data-state="unreviewed"]').length;
                 const t2ActionGlobal     = document.querySelectorAll('#code-view li.probe-item[data-state="action-code"]').length;
                 const t2NoiseGlobal      = document.querySelectorAll('#code-view li.probe-item[data-state="equivalent-code"]').length;
-                const fullyTriagedGlobal = document.querySelectorAll('#code-view .status-pill.clear, #code-view .status-pill.action').length;
+
+                let fullyTriagedGlobal = 0;
+                document.querySelectorAll('#code-view tr.details-row').forEach(row => {{
+                    const probes = row.querySelectorAll('li.probe-item');
+                    if (probes.length === 0) return;
+                    const unrev = row.querySelectorAll('li.probe-item[data-state="unreviewed"]').length;
+                    if (unrev === 0) fullyTriagedGlobal++;
+                }});
+
                 const el = id => document.getElementById(id);
                 if(el('ui-t2-inbox'))       el('ui-t2-inbox').innerText       = t2UnreviewedGlobal + ' / ' + window.initialT2Count;
                 if(el('ui-t2-action'))      el('ui-t2-action').innerText      = t2ActionGlobal;
