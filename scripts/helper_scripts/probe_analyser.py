@@ -375,15 +375,16 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
                 'tier': tier,
             })
 
-    # ── Absolute probe metrics ─────────────────────────────────────────────
-    total_discovered  = len(master_probes)
-    total_unhit       = sum(1 for mp in master_probes.values() if mp['status'] == 'Un-hit')
-    total_executed    = total_discovered - total_unhit
-    clean_kills_count = sum(1 for mp in master_probes.values() if mp['status'] == 'Clean Kill')
-    dirty_kills_count = sum(
-        1 for mp in master_probes.values() if mp['status'] in ('Dirty Kill', 'TIMEOUT')
-    )
-    survivals_count   = sum(1 for mp in master_probes.values() if mp['status'] == 'Survived')
+        # ── Absolute probe metrics ─────────────────────────────────────────────
+        total_discovered = len(master_probes)
+        total_unhit = sum(1 for mp in master_probes.values() if mp['status'] == 'Un-hit')
+        total_executed = total_discovered - total_unhit
+        clean_kills_count = sum(1 for mp in master_probes.values() if mp['status'] == 'Clean Kill')
+
+        dirty_kills_count = sum(1 for mp in master_probes.values() if mp['status'] == 'Dirty Kill')
+        timeouts_count = sum(1 for mp in master_probes.values() if mp['status'] == 'Timeout')
+
+        survivals_count = sum(1 for mp in master_probes.values() if mp['status'] == 'Survived')
 
     # ── Per-test summary for Test-Centric tab ─────────────────────────────
     test_summary = {}
@@ -399,15 +400,16 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
     vulnerable_tests_count = sum(1 for s in test_summary.values() if s['vulnerable'])
 
     metrics = {
-        'total_discovered':  total_discovered,
-        'total_unhit':       total_unhit,
-        'total_executed':    total_executed,
-        'clean_kills':       clean_kills_count,
-        'dirty_kills':       dirty_kills_count,
-        'survivals':         survivals_count,
-        'vulnerable_tests':  vulnerable_tests_count,
-        'errors':            errors_count,
-        'skipped':           skipped_count,
+        'total_discovered': total_discovered,
+        'total_unhit': total_unhit,
+        'total_executed': total_executed,
+        'clean_kills': clean_kills_count,
+        'dirty_kills': dirty_kills_count,
+        'timeouts': timeouts_count,
+        'survivals': survivals_count,
+        'vulnerable_tests': vulnerable_tests_count,
+        'errors': errors_count,
+        'skipped': skipped_count,
     }
 
     return (
@@ -434,7 +436,8 @@ def format_analytics(metrics):
         {'-' * 60}
         PROBE OUTCOMES:
         Clean Kills             : {metrics['clean_kills']}
-        Dirty Kills / Timeouts  : {metrics['dirty_kills']}
+        Dirty Kills             : {metrics['dirty_kills']}
+        Timeouts                : {metrics['timeouts']}
         Survived (Vulnerability): {metrics['survivals']}
         {'-' * 60}
         VULNERABLE TESTS        : {metrics['vulnerable_tests']}

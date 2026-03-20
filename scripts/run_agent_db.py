@@ -153,17 +153,18 @@ def parse_test_outcome(status):
 def derive_probe_outcome(test_outcomes_list, is_timeout):
     """
     Determine overall probe outcome from the list of per-test outcome strings.
-
-    Priority: Clean Kill > Dirty Kill > Survived
+    Priority: Timeout > Clean Kill > Dirty Kill > Survived
     """
     if is_timeout:
-        return "Dirty Kill"
+        return "Timeout"
+
     has_exception_fail = False
     for outcome in test_outcomes_list:
         if outcome == "FAIL by Assert":
             return "Clean Kill"
         if outcome == "FAIL by Exception":
             has_exception_fail = True
+
     return "Dirty Kill" if has_exception_fail else "Survived"
 
 
@@ -251,6 +252,7 @@ def process_project(project, agent_jar):
     # ── Phase 2: Evaluation ────────────────────────────────────────────────
     for idx, (pid, probe_data) in enumerate(sorted(probes.items()), 1):
         desc = probe_data['desc']
+        line_num = probe_data.get('line', -1)
         tests_hitting_probe = sorted(hits.get(pid, set()))
         modifier, location, operator, fqcn, method = parse_probe_desc(desc)
 
@@ -261,6 +263,7 @@ def process_project(project, agent_jar):
                 "project": p_name,
                 "probe_id": pid,
                 "probe_desc": desc,
+                "line": line_num,
                 "operator": operator,
                 "location": location,
                 "modifier": modifier,
@@ -316,6 +319,7 @@ def process_project(project, agent_jar):
             "project": p_name,
             "probe_id": pid,
             "probe_desc": desc,
+            "line": line_num,
             "operator": operator,
             "location": location,
             "modifier": modifier,
