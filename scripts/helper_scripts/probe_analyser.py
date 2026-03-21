@@ -167,14 +167,6 @@ def evaluate(probe_id, tests, project_dir, agent_jar, target_package,
              timeout_limit, log_file):
     """
     Run Maven for a single probe and classify per-test outcomes.
-
-    Returns
-    -------
-    test_results_dict : dict test_name -> status str  (None on error)
-    passed_count      : int
-    failed_count      : int
-    is_timeout        : bool
-    actions_map       : defaultdict(list) test_name -> [action str]
     """
     code, stderr, timed_out = run_maven(
         probe_id, project_dir, agent_jar, target_package,
@@ -231,16 +223,6 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
     """
     Iterate over every discovered probe, evaluate it, and aggregate results
     into the data structures required by the dashboard builder.
-
-    Returns
-    -------
-    master_probes     : dict  probe_id -> probe record
-    dashboard_ledger  : list  of probe dicts for the Probe-Centric tab
-    dashboard_methods : defaultdict  method_key -> method record (Code-Centric tab)
-    dashboard_tests   : defaultdict  test_name -> {probes: [...]}  (Test-Centric tab)
-    test_summary      : dict  test_name -> {clean, dirty, survived, vulnerable}
-    metrics           : dict  summary counts
-    global_tier3_probes: dict  probe_id -> first test that clean-killed it
     """
     master_probes = {}
     for pid, probe_data in sorted(probes.items()):
@@ -249,6 +231,7 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
         master_probes[pid] = {
             'id': pid, 'desc': probe_desc, 'fqcn': fqcn, 'method': m_name,
             'status': 'Un-hit', 'test_outcomes': {},
+            'line': probe_data.get('line', -1)  # Integrated line number
         }
 
     dashboard_tests = defaultdict(lambda: {'probes': []})
@@ -302,6 +285,7 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
                 'id': pid, 'desc': probe_desc, 'tests': sorted_tests,
                 'actions': ['Infinite Loop / Timeout'],
                 'exceptions': ['TIMEOUT: Execution exceeded time limit'],
+                'line': probe_line  # Integrated line number
             })
 
         elif test_results_dict:
@@ -321,7 +305,7 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
                             global_tier3_probes[pid] = t_name
                         dashboard_tests[t_name]['probes'].append({
                             'id': pid, 'desc': probe_desc, 'status': status,
-                            'tier': 3, 'actions': t_actions,
+                            'tier': 3, 'actions': t_actions, 'line': probe_line  # Integrated line number
                         })
                     else:
                         # Dirty kill — exception-level failure
@@ -334,14 +318,14 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
                         probe_exceptions.add(clean_exc)
                         dashboard_tests[t_name]['probes'].append({
                             'id': pid, 'desc': probe_desc, 'status': status,
-                            'tier': 2, 'actions': t_actions,
+                            'tier': 2, 'actions': t_actions, 'line': probe_line  # Integrated line number
                         })
                 elif "PASS" in s_up:
                     mp['test_outcomes'][t_name] = 'survived'
                     has_survived = True
                     dashboard_tests[t_name]['probes'].append({
                         'id': pid, 'desc': probe_desc, 'status': status,
-                        'tier': 1, 'actions': t_actions,
+                        'tier': 1, 'actions': t_actions, 'line': probe_line  # Integrated line number
                     })
 
             # Determine overall probe status
@@ -365,6 +349,7 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
                     'id': pid, 'desc': probe_desc, 'tests': sorted_tests,
                     'actions': rep_actions,
                     'exceptions': sorted(list(probe_exceptions)),
+                    'line': probe_line  # Integrated line number
                 })
         else:
             errors_count += 1
@@ -379,6 +364,7 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
                 'method': mp['method'],
                 'tests': sorted(mp['test_outcomes'].keys()),
                 'tier': tier,
+                'line': mp.get('line', -1)  # Integrated line number
             })
 
         # ── Absolute probe metrics ─────────────────────────────────────────────

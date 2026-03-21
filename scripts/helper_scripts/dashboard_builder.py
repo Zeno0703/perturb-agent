@@ -131,7 +131,7 @@ def build_ledger_row(p, project_dir, probe_status=None):
                     <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; border-left: 1px solid var(--border-color); padding-left: 24px; min-width: 200px;">
                         <h4 style="margin: 0 0 2px 0; font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.06em; font-weight: 700; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">Actions</h4>
                         <a href="{ide_link}" class="btn-small" style="text-align: center; width: 100%;">Open in IDE</a>
-                        <button class="btn-small" style="width: 100%;" onclick="event.stopPropagation(); openCodeModal('{escape_js(p['fqcn'])}', '{escape_js(p['method'])}', null, null)">View Source</button>
+                        <button class="btn-small" style="width: 100%;" onclick="event.stopPropagation(); openCodeModal(null, null, '{escape_js(p['fqcn'])}', '{escape_js(p['method'])}', {p.get('line', -1)}, '{ps}')">View Source</button>
                         <div class='ledger-resolve-wrap'>
                             <button class='btn-resolve' data-resolve-ledger="{p['id']}"
                                 onclick="event.stopPropagation(); markResolved('{p['id']}', 'ledger', this)">
@@ -175,6 +175,7 @@ def build_ledger_html(master_probes, project_dir):
         return {
             'id': mp['id'], 'desc': mp['desc'], 'fqcn': mp['fqcn'],
             'method': mp['method'], 'tests': sorted(mp['test_outcomes'].keys()),
+            'line': mp.get('line', -1)
         }
 
     ledger_t1 = []
@@ -298,6 +299,7 @@ def _build_probe_json_record(p, global_tier3_probes, project_dir):
 
     rec = {
         'id': p['id'],
+        'line': p.get('line', -1),
         'desc': p['desc'],
         'tier': p['tier'],
         'bucket': bucket,
@@ -574,7 +576,7 @@ def build_code_rows(dashboard_methods, master_probes, project_dir):
                 <div class='probe-meta'>
                     <span class='probe-id'>Probe {p['id']}</span>
                     <div class='action-group'>
-                        <button class="btn-small" onclick="event.stopPropagation(); openCodeModal('{escape_js(m_fqcn)}', '{escape_js(m_name)}', null, null)">View Source</button>
+                        <button class="btn-small" onclick="event.stopPropagation(); openCodeModal(null, null, '{escape_js(m_fqcn)}', '{escape_js(m_name)}', {p.get('line', -1)}, 't2')">View Source</button>
                         <a href="{ide_link}" class="btn-small">Open in IDE</a>
                     </div>
                 </div>
@@ -851,7 +853,6 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             .code-container {{ flex: 1; overflow: auto; background: #ffffff; padding: 16px 20px; }}
             .code-container pre {{ margin: 0; }}
             .code-container code {{ font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; font-size: 12px; line-height: 1.6; }}
-            mark.scroll-target {{ background-color: #fef08a; color: #854d0e; border-radius: 3px; padding: 1px 3px; font-weight: 600; }}
 
             .resolved-item {{ opacity: 0.6; }}
             .resolved-item .probe-desc,
@@ -864,6 +865,41 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
             .ledger-resolve-wrap {{ margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }}
 
             .trace-exception {{ color: var(--danger); font-weight: 600; }}
+
+            /* Enhanced Dual-Highlighting Styles */
+            .highlight-line {{
+                display: inline-block;
+                width: 100%;
+                box-sizing: border-box;
+                border-radius: 2px;
+            }}
+            .line-survived {{
+                background-color: rgba(239, 68, 68, 0.25); /* Brighter Red */
+                border-left: 4px solid var(--danger);
+            }}
+            .line-dirty {{
+                background-color: rgba(245, 158, 11, 0.25); /* Brighter Yellow/Orange */
+                border-left: 4px solid var(--warning);
+            }}
+            .line-clean {{
+                background-color: rgba(16, 185, 129, 0.25); /* Brighter Green */
+                border-left: 4px solid var(--success);
+            }}
+
+            mark.method-target {{ 
+                background-color: #fef08a; 
+                color: #854d0e; 
+                border-radius: 3px; 
+                padding: 1px 3px; 
+                font-weight: 600; 
+            }}
+
+            .pulse-animation {{
+                animation: highlight-pulse 1.2s ease-out;
+            }}
+            @keyframes highlight-pulse {{
+                0% {{ background-color: rgba(250, 204, 21, 0.6); }} 
+            }}
         </style>
 
         <script src="source_cache.js"></script>
@@ -881,7 +917,6 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
 
             // ── _triageState ─────────────────────────────────────────────────────────
             // Persists triage decisions across DOM teardowns.
-            // Shape: {{ [probeId]: {{ [testSafeId]: {{ decision, tag, resolved }} }} }}
             const _triageState = {{}};
 
             function _tsGet(probeId, testId) {{
@@ -966,7 +1001,7 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                     <div class='probe-meta'>
                         <span class='probe-id'>Probe ${{pid}}</span>
                         <div class='action-group'>
-                            <button class="btn-small" onclick="event.stopPropagation();openCodeModal('${{jsQ(testClass)}}','${{jsQ(testMethod)}}','${{jsQ(rec.fqcn)}}','${{jsQ(rec.method)}}')">View Source</button>
+                            <button class="btn-small" onclick="event.stopPropagation(); openCodeModal('${{jsQ(testClass)}}', '${{jsQ(testMethod)}}', '${{jsQ(rec.fqcn)}}', '${{jsQ(rec.method)}}', ${{rec.line}}, '${{rec.bucket}}')">View Source</button>
                             <a href="${{rec.targetLink}}" class="btn-small">Open Target</a>
                             <a href="${{esc(testLink)}}" class="btn-small">Open Test</a>
                         </div>
@@ -1685,18 +1720,29 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                 }});
             }}
 
-            function openCodeModal(class1, method1, class2, method2) {{
+            function openCodeModal(testClass, testMethod, targetClass, targetMethod, targetLine, outcome) {{
+                const testPane = document.getElementById('modalTestPane');
                 const targetPane = document.getElementById('modalTargetPane');
-                if (class2 && class2 !== 'null') {{
-                    document.getElementById('modalTestTitle').innerHTML = 'Test Class <span class="pane-subtitle">— ' + class1 + '.' + method1 + '()</span>';
-                    document.getElementById('modalTargetTitle').innerHTML = 'Target Class <span class="pane-subtitle">— ' + class2 + '.' + method2 + '()</span>';
+
+                // If opened from Code-Centric or Probe-Centric, we only show the Target Code pane
+                if (!testClass || testClass === 'null') {{
+                    testPane.style.display = 'none';
+                    document.getElementById('modalTargetTitle').innerHTML = 'Target Class <span class="pane-subtitle">— ' + targetClass + '.' + targetMethod + '()</span>';
                     targetPane.style.display = 'flex';
-                    renderAndHighlight('modalTargetCode', fileCache[class2], method2);
-                }} else {{
-                    document.getElementById('modalTestTitle').innerHTML = 'Source Code <span class="pane-subtitle">— ' + class1 + '.' + method1 + '()</span>';
-                    targetPane.style.display = 'none';
+                    renderAndHighlight('modalTargetCode', fileCache[targetClass], targetMethod, targetLine, outcome);
+                }} 
+                // If opened from Test-Centric, we show side-by-side
+                else {{
+                    testPane.style.display = 'flex';
+                    targetPane.style.display = 'flex';
+                    document.getElementById('modalTestTitle').innerHTML = 'Test Class <span class="pane-subtitle">— ' + testClass + '.' + testMethod + '()</span>';
+                    document.getElementById('modalTargetTitle').innerHTML = 'Target Class <span class="pane-subtitle">— ' + targetClass + '.' + targetMethod + '()</span>';
+
+                    // Render both (Test pane doesn't get the specific line highlight, just the method name)
+                    renderAndHighlight('modalTestCode', fileCache[testClass], testMethod, null, null);
+                    renderAndHighlight('modalTargetCode', fileCache[targetClass], targetMethod, targetLine, outcome);
                 }}
-                renderAndHighlight('modalTestCode', fileCache[class1], method1);
+
                 document.getElementById('codeModal').style.display = "block";
                 document.body.style.overflow = "hidden";
             }}
@@ -1913,26 +1959,55 @@ def generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, test_st
                 }}
             }});
 
-            function renderAndHighlight(containerId, code, methodName) {{
+            function renderAndHighlight(containerId, code, methodName, targetLine, outcome) {{
                 const container = document.getElementById(containerId);
                 if (!code) {{
                     container.innerHTML = "<pre><code>// File content not available or could not be read.</code></pre>";
                     return;
                 }}
+
+                // 1. Clean and insert raw code
                 let escapedCode = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 container.innerHTML = `<pre><code class="language-java">${{escapedCode}}</code></pre>`;
-                hljs.highlightElement(container.querySelector('code'));
+                const codeEl = container.querySelector('code');
+
+                // 2. Format syntax using highlight.js
+                hljs.highlightElement(codeEl);
+
+                // 3. Optional: Highlight the method signature via regex
                 if (methodName && methodName !== 'unknown' && methodName !== '<init>') {{
-                    const codeEl = container.querySelector('code');
                     const regex = new RegExp("(\\\\b" + methodName + "\\\\b)(?=(?:<[^>]+>)*\\\\s*\\\\()", "g");
-                    codeEl.innerHTML = codeEl.innerHTML.replace(regex, "<mark class='scroll-target'>$1</mark>");
-                    setTimeout(() => {{
-                        const targets = container.querySelectorAll('.scroll-target');
-                        if (targets.length > 0) {{
-                            targets[0].scrollIntoView({{ behavior: 'auto', block: 'center' }});
-                        }}
-                    }}, 150);
+                    codeEl.innerHTML = codeEl.innerHTML.replace(regex, "<mark class='method-target'>$1</mark>");
                 }}
+
+                // 4. Highlight Exact Probe Line
+                if (targetLine && targetLine > 0) {{
+                    let lines = codeEl.innerHTML.split('\\n');
+                    let lineIdx = targetLine - 1; // Array is 0-indexed
+
+                    if (lineIdx >= 0 && lineIdx < lines.length) {{
+                        let bgClass = 'line-survived'; // Default Red
+                        if (outcome === 't2' || outcome === 'Dirty Kill' || outcome === 'dirty' || outcome === 'TIMEOUT') {{
+                            bgClass = 'line-dirty';
+                        }} else if (outcome === 't3' || outcome === 'Clean Kill' || outcome === 'clean' || outcome === 'covered') {{
+                            bgClass = 'line-clean';
+                        }}
+
+                        let safeLineHtml = lines[lineIdx].length === 0 ? ' ' : lines[lineIdx];
+                        lines[lineIdx] = `<span class="highlight-line ${{bgClass}} pulse-animation scroll-target">${{safeLineHtml}}</span>`;
+                        codeEl.innerHTML = lines.join('\\n');
+                    }}
+                }}
+
+                // 5. Smooth auto-scroll (Prioritize exact line, fallback to method name)
+                setTimeout(() => {{
+                    let target = container.querySelector('.scroll-target'); // Try line first
+                    if (!target) target = container.querySelector('.method-target'); // Fallback to method name
+
+                    if (target) {{
+                        target.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                    }}
+                }}, 150);
             }}
 
             window.onclick = function(event) {{
