@@ -9,6 +9,7 @@ import org.probe.ProbeCatalog;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.lang.instrument.Instrumentation;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -24,6 +25,12 @@ public class InstrumentationController {
     }
 
     public static void install(Instrumentation inst) {
+        List<PerturbationStrategy> strategies = List.of(
+                new ArgumentPerturbationStrategy(),
+                new ReturnPerturbationStrategy(),
+                new VariablePerturbationStrategy()
+        );
+
         new AgentBuilder.Default()
                 .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
                 .with(AgentBuilder.Listener.StreamWriting.toSystemError().withErrorsOnly())
@@ -36,10 +43,9 @@ public class InstrumentationController {
                     registerProbesForType(type, loader);
 
                     DynamicType.Builder<?> modifiedBuilder = builderInstance;
-
-                    modifiedBuilder = new ArgumentPerturbationStrategy().apply(modifiedBuilder);
-                    modifiedBuilder = new ReturnPerturbationStrategy().apply(modifiedBuilder);
-                    modifiedBuilder = new VariablePerturbationStrategy().apply(modifiedBuilder);
+                    for (PerturbationStrategy strategy : strategies) {
+                        modifiedBuilder = strategy.apply(modifiedBuilder);
+                    }
 
                     return modifiedBuilder;
                 })

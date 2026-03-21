@@ -1,19 +1,51 @@
+# ========================
+# Build Artifacts & Dependencies
+# ========================
 target/
+build/
+bin/
+out/
+.kotlin/
+.lens/
+
+# Keep Maven Wrapper
 !.mvn/wrapper/maven-wrapper.jar
+
+# Language Specifics
+*.class
+*.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
-.kotlin
 
-### IntelliJ IDEA ###
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/libraries/
+# ========================
+# Python (CLI)
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# ========================
+# Data & Research Artifacts
+# ========================
+# Prevents database and result leakage
+research/data/database.json
+research/analysis_results/*.pdf
+research/analysis_results/*.png
+scripts/analysis_results/
+
+# ========================
+# IDEs & Editors
+# ========================
+# IntelliJ
+.idea/
 *.iws
 *.iml
 *.ipr
 
-### Eclipse ###
+# Eclipse
 .apt_generated
 .classpath
 .factorypath
@@ -22,24 +54,18 @@ target/
 .springBeans
 .sts4-cache
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
+# NetBeans
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
 
-### VS Code ###
+# VS Code
 .vscode/
 
-### Mac OS ###
+# ========================
+# OS Files
+# ========================
 .DS_Store
-
-# Tool caches
-.lens/
-
-scripts/database.json
-scripts/analysis_results/database.json
+Thumbs.db

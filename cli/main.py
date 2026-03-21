@@ -1,22 +1,21 @@
 """
-run.py — Unified entry-point for the perturbation-testing pipeline.
+main.py — Unified entry-point for the perturbation-testing pipeline.
 
 Single-project:
-    python run.py <project_dir> <agent_jar> <target_package> [options]
+    python main.py <project_dir> <agent_jar> <target_package> [options]
 
 Batch mode:
-    python run.py --batch <projects.json> <agent_jar> [options]
+    python main.py --batch <projects.json> <agent_jar> [options]
 
 Options:
     --format  stdout | html | json   repeatable; default: stdout
-    --output  <path>                 JSON database path (default: database.json)
+    --output  <path>                 JSON database path (defaults to research/data/database.json)
     --discovery-only                 stop after discovery, skip evaluation
     --no-browser                     generate the HTML dashboard but do not open it
 
 Examples:
-    python run.py ./my-project ./agent.jar org.example --format stdout --format html
-    python run.py ./my-project ./agent.jar org.example --format stdout --format html --format json
-    python run.py --batch projects.json ./agent.jar --format stdout --format html --format json --no-browser
+    python main.py /path/to/my-project ../agent/target/perturb-agent-1.0-SNAPSHOT.jar org.example --format html
+    python main.py --batch ../research/data/projects.json ../agent/target/perturb-agent-1.0-SNAPSHOT.jar --format json
 """
 
 import argparse
@@ -27,9 +26,9 @@ import time
 import webbrowser
 from collections import defaultdict
 
-from helper_scripts.probe_analyser import discovery, run_analysis, format_analytics
-from helper_scripts.dashboard_builder import generate_dashboard
-from helper_scripts.db_exporter import append_to_database, already_recorded
+from core.probe_analyser import discovery, run_analysis, format_analytics
+from core.dashboard_builder import generate_dashboard
+from core.db_exporter import append_to_database, already_recorded
 
 
 # ==============================================================================
@@ -61,7 +60,7 @@ def export_html(
 
 
 def export_json(project_name, master_probes, hits, db_path):
-    """Delegate all serialisation to db_exporter — run.py stays schema-free."""
+    """Delegate all serialisation to db_exporter — main.py stays schema-free."""
     hit_counts = defaultdict(lambda: defaultdict(int))
     for pid, tests_set in hits.items():
         for t in tests_set:
@@ -227,13 +226,13 @@ def run_batch(batch_config_path, agent_jar, formats, db_path, no_browser):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="run.py",
+        prog="main.py",
         description=(
             "Unified perturbation-testing pipeline.\n\n"
             "Single-project:\n"
-            "  python run.py <project_dir> <agent_jar> <target_package> [options]\n\n"
+            "  python main.py <project_dir> <agent_jar> <target_package> [options]\n\n"
             "Batch mode:\n"
-            "  python run.py --batch <config.json> <agent_jar> [options]"
+            "  python main.py --batch <config.json> <agent_jar> [options]"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -251,10 +250,14 @@ def build_parser():
         choices=["stdout", "html", "json"], metavar="FORMAT",
         help="Export format (repeatable): stdout | html | json.  Default: stdout.",
     )
+
+    default_db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "research", "data", "database.json"))
+
     parser.add_argument(
-        "--output", default="database.json", metavar="DB_FILE",
-        help="JSON database path (default: database.json). Used with --format json.",
+        "--output", default=default_db_path, metavar="DB_FILE",
+        help=f"JSON database path (default: {default_db_path}). Used with --format json.",
     )
+
     parser.add_argument(
         "--discovery-only", action="store_true",
         help="Run only the discovery phase and exit without evaluation.",
