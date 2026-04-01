@@ -7,19 +7,11 @@ except ModuleNotFoundError:
     from .probe_analyser import parse_probe
 
 
-
 def append_to_database(project_name, master_probes, hit_counts, db_path):
     """
     Serialise *master_probes* for *project_name* and append the rows to the
-    JSON database at *db_path*.  Creates the file if it does not exist yet;
+    JSON database at *db_path*. Creates the file if it does not exist yet;
     merges into it if it does.
-
-    Parameters
-    ----------
-    project_name  : str  — display name stored in every row.
-    master_probes : dict — pid -> probe dict as returned by run_analysis().
-    hit_counts    : dict — pid -> {test_name -> hit_count}.
-    db_path       : str  — filesystem path to the JSON database file.
     """
     probes_rows = []
     executions_rows = []
@@ -46,7 +38,7 @@ def append_to_database(project_name, master_probes, hit_counts, db_path):
             "total_hits":       total_hits,
             "unique_tests_hit": len(tests_hitting),
             "probe_outcome":    probe_outcome,
-            "timed_out":        probe_outcome == "Timeout",
+            "timed_out":        probe_outcome == "TIMEOUT",
         })
 
         for t_name, t_data in mp['test_outcomes'].items():
@@ -76,8 +68,11 @@ def append_to_database(project_name, master_probes, hit_counts, db_path):
             })
 
     if os.path.isfile(db_path):
-        with open(db_path, encoding="utf-8") as f:
-            db = json.load(f)
+        try:
+            with open(db_path, encoding="utf-8") as f:
+                db = json.load(f)
+        except json.JSONDecodeError:
+            db = {"probes": [], "test_executions": []}
     else:
         db = {"probes": [], "test_executions": []}
 
@@ -93,13 +88,16 @@ def append_to_database(project_name, master_probes, hit_counts, db_path):
     )
 
 
-def already_recorded(db_path):
+def get_recorded_probes(db_path, project_name):
     """
-    Return the set of project names already present in *db_path*.
+    Return the set of probe IDs already recorded for the given project.
     Returns an empty set if the file does not exist.
     """
     if not os.path.isfile(db_path):
         return set()
-    with open(db_path, encoding="utf-8") as f:
-        db = json.load(f)
-    return {p["project"] for p in db.get("probes", [])}
+    try:
+        with open(db_path, encoding="utf-8") as f:
+            db = json.load(f)
+        return {p["probe_id"] for p in db.get("probes", []) if p.get("project") == project_name}
+    except (json.JSONDecodeError, KeyError):
+        return set()

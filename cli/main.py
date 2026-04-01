@@ -1,23 +1,3 @@
-"""
-main.py — Unified entry-point for the perturbation-testing pipeline.
-
-Single-project:
-    python main.py <project_dir> <agent_jar> <target_package> [options]
-
-Batch mode:
-    python main.py --batch <projects.json> <agent_jar> [options]
-
-Options:
-    --format  stdout | html | json   repeatable; default: stdout
-    --output  <path>                 JSON database path (defaults to research/data/database.json)
-    --discovery-only                 stop after discovery, skip evaluation
-    --no-browser                     generate the HTML dashboard but do not open it
-
-Examples:
-    python main.py /path/to/my-project ../agent/target/perturb-agent-1.0-SNAPSHOT.jar org.example --format html
-    python main.py --batch ../research/data/projects.json ../agent/target/perturb-agent-1.0-SNAPSHOT.jar --format json
-"""
-
 import argparse
 import json
 import os
@@ -28,44 +8,25 @@ from collections import defaultdict
 
 from core.probe_analyser import discovery, run_analysis, format_analytics
 from core.dashboard_builder import generate_dashboard
-from core.db_exporter import append_to_database, already_recorded
-
-
-# ==============================================================================
-# EXPORT FUNCTIONS
-# ==============================================================================
+from core.db_exporter import append_to_database, get_recorded_probes
 
 def export_stdout(metrics, analytics_text, project_dir, total_duration):
-    """Print the final analytics summary to the terminal."""
     print(analytics_text)
     print(f"Total wall-clock time : {total_duration:.2f}s")
     print(f"Artifacts saved in    : {os.path.join(project_dir, 'target/perturb')}")
 
-
-def export_html(
-    project_dir,
-    dashboard_ledger, dashboard_methods, dashboard_tests,
-    test_summary, metrics, global_tier3_probes, master_probes,
-    no_browser=False,
-):
-    """Generate the HTML dashboard and optionally open it in a browser."""
-    html_file = generate_dashboard(
-        project_dir,
-        dashboard_ledger, dashboard_methods, dashboard_tests,
-        test_summary, metrics, global_tier3_probes, master_probes,
-    )
+def export_html(project_dir, dashboard_ledger, dashboard_methods, dashboard_tests,
+                test_summary, metrics, global_tier3_probes, master_probes, no_browser=False):
+    html_file = generate_dashboard(project_dir, dashboard_ledger, dashboard_methods, dashboard_tests,
+                                   test_summary, metrics, global_tier3_probes, master_probes)
     print(f"Dashboard generated at: {html_file}")
-    if not no_browser:
-        webbrowser.open('file://' + os.path.realpath(html_file))
-
+    if not no_browser: webbrowser.open('file://' + os.path.realpath(html_file))
 
 def export_json(project_name, master_probes, hits, db_path):
-    """Delegate all serialisation to db_exporter — main.py stays schema-free."""
     hit_counts = defaultdict(lambda: defaultdict(int))
     for pid, tests_set in hits.items():
         for t in tests_set:
             hit_counts[pid][t] += 1
-
     append_to_database(project_name, master_probes, hit_counts, db_path)
 
 
@@ -76,22 +37,8 @@ def export_json(project_name, master_probes, hits, db_path):
 def run_single_project(
     project_dir, agent_jar, target_package,
     formats, db_path, discovery_only, no_browser,
-    project_name=None,
+    project_name=None, batch_size=100, redo=False
 ):
-    """
-    Run the full pipeline for one project and dispatch to all requested exports.
-
-    Parameters
-    ----------
-    project_dir    : str   — Maven project root.
-    agent_jar      : str   — path to the perturbation-agent JAR.
-    target_package : str   — Java package to instrument.
-    formats        : set   — any subset of {'stdout', 'html', 'json'}.
-    db_path        : str   — JSON database path (used only when 'json' in formats).
-    discovery_only : bool  — stop after discovery, skip evaluation.
-    no_browser     : bool  — suppress auto-opening the HTML dashboard.
-    project_name   : str   — display name (defaults to the directory basename).
-    """
     target = os.path.join(project_dir, "target/perturb")
     os.makedirs(target, exist_ok=True)
     log_path = os.path.join(target, "execution.log")
@@ -115,10 +62,32 @@ def run_single_project(
             log_file.write(msg)
             return
 
+        # Filter against already recorded probes
+        recorded_probes = get_recorded_probes(db_path, p_name) if ('json' in formats and not redo) else set()
+        probes_to_run = {pid: d for pid, d in probes.items() if pid not in recorded_probes}
+
+        if not probes_to_run:
+            msg = f"\n[INFO] All {len(probes)} probe(s) already recorded in database. Skipping evaluation.\n"
+            print(msg)
+            log_file.write(msg)
+            return
+
+        if len(probes_to_run) < len(probes):
+            skipped = len(probes) - len(probes_to_run)
+            msg = f"\n[INFO] Resuming progress: {skipped} skipped, {len(probes_to_run)} left to evaluate.\n"
+            print(msg)
+            log_file.write(msg)
+
         dynamic_timeout = max(discovery_duration * 2.0, 10.0)
         log_file.write(f"Timeout for evaluations set to: {dynamic_timeout:.2f}s\n")
 
         # ── Phase 2: Evaluation ────────────────────────────────────────────
+
+        def batch_callback(batch_probes):
+            """Callback pushed from analyser to incrementally save to the database."""
+            if 'json' in formats:
+                export_json(p_name, batch_probes, hits, db_path)
+
         (
             master_probes,
             dashboard_ledger,
@@ -128,8 +97,8 @@ def run_single_project(
             metrics,
             global_tier3_probes,
         ) = run_analysis(
-            probes, hits, project_dir, agent_jar, target_package,
-            dynamic_timeout, log_file,
+            probes_to_run, hits, project_dir, agent_jar, target_package,
+            dynamic_timeout, log_file, batch_callback=batch_callback, batch_size=batch_size
         )
 
         # ── Phase 3: Analytics (always written to log) ────────────────────
@@ -152,36 +121,16 @@ def run_single_project(
                 no_browser=no_browser,
             )
 
-        if 'json' in formats:
-            export_json(p_name, master_probes, hits, db_path)
+        # JSON is not manually exported here at the end anymore because the callback handled it incrementally.
 
 
 # ==============================================================================
 # BATCH MODE
 # ==============================================================================
 
-def run_batch(batch_config_path, agent_jar, formats, db_path, no_browser):
-    """
-    Run the pipeline for every project in a JSON config file, skipping any
-    already present in the database.
-
-    Config format (projects.json):
-        [
-          { "dir": "/path/to/project", "package": "com.example", "name": "MyProject" },
-          ...
-        ]
-    """
+def run_batch(batch_config_path, agent_jar, formats, db_path, no_browser, batch_size, redo):
     with open(batch_config_path, encoding="utf-8") as f:
         projects = json.load(f)
-
-    done = already_recorded(db_path) if 'json' in formats else set()
-    if done:
-        print(
-            f"Existing database at '{db_path}' — "
-            f"skipping {len(done)} already-recorded project(s): "
-            f"{', '.join(sorted(done))}.\n"
-            "Delete the file to force a full re-run."
-        )
 
     batch_start = time.time()
 
@@ -189,10 +138,6 @@ def run_batch(batch_config_path, agent_jar, formats, db_path, no_browser):
         p_name = project.get("name", project["dir"])
         p_dir  = project["dir"]
         p_pkg  = project["package"]
-
-        if p_name in done:
-            print(f"[{p_name}] Already in database — skipping.")
-            continue
 
         if not os.path.isdir(p_dir):
             print(f"[{p_name}] Directory not found: {p_dir} — skipping.")
@@ -211,6 +156,8 @@ def run_batch(batch_config_path, agent_jar, formats, db_path, no_browser):
                 discovery_only=False,
                 no_browser=no_browser,
                 project_name=p_name,
+                batch_size=batch_size,
+                redo=redo,
             )
         except SystemExit as exc:
             print(f"[{p_name}] Pipeline exited early: {exc}. Continuing.")
@@ -259,6 +206,15 @@ def build_parser():
     )
 
     parser.add_argument(
+        "--batch-size", type=int, default=100, metavar="N",
+        help="Number of probes to evaluate before saving progress to the database (default: 100).",
+    )
+    parser.add_argument(
+        "--redo", action="store_true",
+        help="Force re-evaluation of all probes (ignore already recorded probes).",
+    )
+
+    parser.add_argument(
         "--discovery-only", action="store_true",
         help="Run only the discovery phase and exit without evaluation.",
     )
@@ -282,7 +238,7 @@ def main():
     if args.batch:
         if not os.path.isfile(args.batch):
             sys.exit(f"Batch config not found: {args.batch}")
-        run_batch(args.batch, args.agent_jar, formats, args.output, args.no_browser)
+        run_batch(args.batch, args.agent_jar, formats, args.output, args.no_browser, args.batch_size, args.redo)
         return
 
     if not args.project_dir or not args.target_package:
@@ -302,6 +258,8 @@ def main():
         args.output,
         args.discovery_only,
         args.no_browser,
+        batch_size=args.batch_size,
+        redo=args.redo
     )
 
 

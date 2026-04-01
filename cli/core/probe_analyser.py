@@ -247,10 +247,10 @@ def evaluate(probe_id, tests, project_dir, agent_jar, target_package,
 # ---------------------------------------------------------------------------
 
 def run_analysis(probes, hits, project_dir, agent_jar, target_package,
-                 dynamic_timeout, log_file):
+                 dynamic_timeout, log_file, batch_callback=None, batch_size=100):
     """
-    Iterate over every discovered probe, evaluate it, and aggregate results
-    into the data structures required by the dashboard builder.
+    Iterate over every discovered probe, evaluate it, and aggregate results.
+    If a batch_callback is provided, it flushes the current probe results every N iterations.
     """
     master_probes = {}
     for pid, probe_data in sorted(probes.items()):
@@ -268,11 +268,15 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
         lambda: {'fqcn': '', 'method': '', 'tests': set(), 'probes': []}
     )
 
-    global_tier3_probes = {}   # probe_id -> first test that clean-killed it
+    global_tier3_probes = {}
     errors_count = skipped_count = 0
 
     total_probes = len(probes)
     current_probe_idx = 0
+
+    # Batch tracking
+    batch_counter = 0
+    batch_master_probes = {}
 
     for pid, probe_data in sorted(probes.items()):
         current_probe_idx += 1
@@ -292,6 +296,14 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
         if not tests:
             log_file.write("  SKIP: No tests hit this probe\n")
             skipped_count += 1
+
+            # Register Un-hit to batch
+            batch_master_probes[pid] = mp
+            batch_counter += 1
+            if batch_callback and batch_counter >= batch_size:
+                batch_callback(batch_master_probes)
+                batch_master_probes = {}
+                batch_counter = 0
             continue
 
         sorted_tests = sorted(tests)
@@ -314,7 +326,7 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
                 'id': pid, 'desc': probe_desc, 'tests': sorted_tests,
                 'actions': ['Infinite Loop / Timeout'],
                 'exceptions': ['TIMEOUT: Execution exceeded time limit'],
-                'line': probe_line  # Integrated line number
+                'line': probe_line
             })
 
         elif test_results_dict:
@@ -355,7 +367,6 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
                         'tier': 1, 'actions': t_actions, 'line': probe_line
                     })
 
-            # Determine overall probe status
             if has_clean:
                 mp['status'] = 'Clean Kill'
             elif has_dirty:
@@ -363,23 +374,32 @@ def run_analysis(probes, hits, project_dir, agent_jar, target_package,
             elif has_survived:
                 mp['status'] = 'Survived'
 
-            # Feed Code-Centric tab for dirty-kill probes
             if has_dirty and not has_clean:
                 method_key = f"{fqcn}#{m_name}"
                 dashboard_methods[method_key]['fqcn'] = fqcn
                 dashboard_methods[method_key]['method'] = m_name
                 dashboard_methods[method_key]['tests'].update(tests)
-                rep_actions = (
-                    actions_map.get(sorted_tests[0], []) if sorted_tests else []
-                )
+                rep_actions = actions_map.get(sorted_tests[0], []) if sorted_tests else []
                 dashboard_methods[method_key]['probes'].append({
                     'id': pid, 'desc': probe_desc, 'tests': sorted_tests,
                     'actions': rep_actions,
                     'exceptions': sorted(list(probe_exceptions)),
-                    'line': probe_line  # Integrated line number
+                    'line': probe_line
                 })
         else:
             errors_count += 1
+
+        # Register evaluated probe to batch
+        batch_master_probes[pid] = mp
+        batch_counter += 1
+        if batch_callback and batch_counter >= batch_size:
+            batch_callback(batch_master_probes)
+            batch_master_probes = {}
+            batch_counter = 0
+
+    # Flush any remaining probes that didn't hit the limit exactly
+    if batch_callback and batch_master_probes:
+        batch_callback(batch_master_probes)
 
     # ── Build dashboard_ledger from master_probes ──────────────────────────
     dashboard_ledger = []

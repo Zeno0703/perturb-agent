@@ -39,14 +39,9 @@ class InstrumentationFilters {
     }
 
     static boolean isTargetMethod(MethodDescription method, TypeDescription type) {
-        if (method.isAbstract() || method.isNative() || method.isTypeInitializer()) return false;
-
         String name = method.getInternalName();
-        boolean isLambda = name.contains("lambda$");
-        if (!isLambda && (method.isSynthetic() || method.isBridge() || name.contains("$"))) {
-            return false;
-        }
-
+        if (method.isAbstract() || method.isNative() || method.isTypeInitializer()) return false;
+        if (method.isSynthetic() || method.isBridge() || name.contains("$")) return false;
         if (type.isEnum() && (name.equals("values") || name.equals("valueOf"))) return false;
         return true;
     }

@@ -31,11 +31,9 @@ env/
 # Data & Research Artifacts
 # ========================
 # Prevents database and result leakage
-research/data/database.json
-research/data/mutations*.xml
-research/analysis_results/database.json
-research/analysis_results/*.pdf
-research/analysis_results/*.png
+research/data/
+research/analysis_results/
+examples/
 
 # ========================
 # IDEs & Editors
