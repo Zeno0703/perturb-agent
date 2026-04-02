@@ -52,6 +52,10 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
         private final String asmDesc;
         private final List<PendingProbe> pendingProbes = new ArrayList<>();
         private final Map<Integer, LvtData> lvtEntries = new HashMap<>();
+
+        private record PendingProbe(int id, int slot) {}
+        private record LvtData(String name, String type) {}
+
         private int currentLine = -1;
 
         public VariablePerturbationVisitor(int api, MethodVisitor methodVisitor, String methodName, String asmDesc) {
@@ -127,8 +131,5 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
             }
             super.visitEnd();
         }
-
-        private record PendingProbe(int id, int slot) {}
-        private record LvtData(String name, String type) {}
     }
 }

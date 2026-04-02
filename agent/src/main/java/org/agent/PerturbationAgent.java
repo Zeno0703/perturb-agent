@@ -31,19 +31,13 @@ public class PerturbationAgent {
             }
 
             try {
-                ProbeExecutionTracker.dumpTo(outDir.resolve("hits.txt"));
+                ProbeExecutionTracker.dumpTo(outDir);
             } catch (Exception e) {
-                System.out.println("Failed to dump hits: " + e.getMessage());
+                System.out.println("Failed to dump execution tracker: " + e.getMessage());
             }
 
             try {
-                ProbeExecutionTracker.dumpActionsTo(outDir.resolve("perturbations.txt"));
-            } catch (Exception e) {
-                System.out.println("Failed to dump perturbations: " + e.getMessage());
-            }
-
-            try {
-                TestOutcomeTracker.dumpTo(outDir.resolve("test-outcomes.txt"));
+                TestOutcomeTracker.dumpTo(outDir);
             } catch (Exception e) {
                 System.out.println("Failed to dump test outcomes: " + e.getMessage());
             }

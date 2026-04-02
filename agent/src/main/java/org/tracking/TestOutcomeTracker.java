@@ -33,15 +33,11 @@ public class TestOutcomeTracker {
         outcomes.clear();
     }
 
-    public static void dumpTo(Path file) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        for (Map.Entry<String, String> e : outcomes.entrySet()) {
-            sb.append("{\"test\":")
-                    .append(jsonString(e.getKey()))
-                    .append(",\"status\":")
-                    .append(jsonString(e.getValue()))
-                    .append("}\n");
-        }
-        FileUtils.writeAtomic(file, sb.toString());
+    public static void dumpTo(Path outDir) throws IOException {
+        FileUtils.writeLinesAtomic(
+                outDir.resolve("test-outcomes.txt"),
+                outcomes.entrySet(),
+                e -> "{\"test\":" + jsonString(e.getKey()) + ",\"status\":" + jsonString(e.getValue()) + "}"
+        );
     }
 }
