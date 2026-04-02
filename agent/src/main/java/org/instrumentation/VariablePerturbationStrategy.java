@@ -75,7 +75,7 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
                 pendingProbes.add(new PendingProbe(probeId, varIndex));
 
                 super.visitLdcInsn(probeId);
-                super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "apply", "(II)I", false);
+                super.visitMethodInsn(Opcodes.INVOKESTATIC, PerturbationStrategy.GATE_CLASS, PerturbationStrategy.GATE_METHOD, PerturbationStrategy.DESC_INT, false);
 
             } else if (opcode == Opcodes.ASTORE) {
                 int probeId = ProbeRegistrar.registerVariable(methodName, varIndex, currentLine, asmDesc, "Object", true);
@@ -83,7 +83,7 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
 
                 super.visitInsn(Opcodes.DUP);
                 super.visitLdcInsn(probeId);
-                super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "checkAndTrackObject", "(Ljava/lang/Object;I)Z", false);
+                super.visitMethodInsn(Opcodes.INVOKESTATIC, PerturbationStrategy.GATE_CLASS, PerturbationStrategy.GATE_METHOD_CHECK, PerturbationStrategy.DESC_CHECK_OBJ, false);
                 Label skip = new Label();
                 super.visitJumpInsn(Opcodes.IFEQ, skip);
                 super.visitInsn(Opcodes.POP);
@@ -102,7 +102,7 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
             super.visitIntInsn(Opcodes.SIPUSH, increment);
             super.visitInsn(Opcodes.IADD);
             super.visitLdcInsn(probeId);
-            super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "apply", "(II)I", false);
+            super.visitMethodInsn(Opcodes.INVOKESTATIC, PerturbationStrategy.GATE_CLASS, PerturbationStrategy.GATE_METHOD, PerturbationStrategy.DESC_INT, false);
             super.visitVarInsn(Opcodes.ISTORE, varIndex);
         }
 

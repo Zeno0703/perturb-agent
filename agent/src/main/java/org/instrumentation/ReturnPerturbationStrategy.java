@@ -76,13 +76,13 @@ public class ReturnPerturbationStrategy implements PerturbationStrategy {
                 if (opcode == Opcodes.IRETURN) {
                     super.visitLdcInsn(probeId);
                     if (isBooleanReturn) {
-                        super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "apply", "(ZI)Z", false);
+                        super.visitMethodInsn(Opcodes.INVOKESTATIC, PerturbationStrategy.GATE_CLASS, PerturbationStrategy.GATE_METHOD, PerturbationStrategy.DESC_BOOL, false);
                     } else {
-                        super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "apply", "(II)I", false);
+                        super.visitMethodInsn(Opcodes.INVOKESTATIC, PerturbationStrategy.GATE_CLASS, PerturbationStrategy.GATE_METHOD, PerturbationStrategy.DESC_INT, false);
                     }
                 } else if (opcode == Opcodes.ARETURN) {
                     super.visitLdcInsn(probeId);
-                    super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "apply", "(Ljava/lang/Object;I)Ljava/lang/Object;", false);
+                    super.visitMethodInsn(Opcodes.INVOKESTATIC, PerturbationStrategy.GATE_CLASS, PerturbationStrategy.GATE_METHOD, PerturbationStrategy.DESC_OBJ, false);
                     super.visitTypeInsn(Opcodes.CHECKCAST, returnInternalName);
                 }
             }

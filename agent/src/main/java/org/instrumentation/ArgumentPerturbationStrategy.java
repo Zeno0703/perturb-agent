@@ -78,7 +78,7 @@ public class ArgumentPerturbationStrategy implements PerturbationStrategy {
                     if (pType.represents(int.class) || pType.represents(short.class) || pType.represents(byte.class) || pType.represents(char.class)) {
                         super.visitVarInsn(Opcodes.ILOAD, currentSlot);
                         super.visitLdcInsn(probeId);
-                        super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "apply", "(II)I", false);
+                        super.visitMethodInsn(Opcodes.INVOKESTATIC, PerturbationStrategy.GATE_CLASS, PerturbationStrategy.GATE_METHOD, PerturbationStrategy.DESC_INT, false);
 
                         if (pType.represents(short.class)) {
                             super.visitInsn(Opcodes.I2S);
@@ -93,13 +93,13 @@ public class ArgumentPerturbationStrategy implements PerturbationStrategy {
                     } else if (pType.represents(boolean.class)) {
                         super.visitVarInsn(Opcodes.ILOAD, currentSlot);
                         super.visitLdcInsn(probeId);
-                        super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "apply", "(ZI)Z", false);
+                        super.visitMethodInsn(Opcodes.INVOKESTATIC, PerturbationStrategy.GATE_CLASS, PerturbationStrategy.GATE_METHOD, PerturbationStrategy.DESC_BOOL, false);
                         super.visitVarInsn(Opcodes.ISTORE, currentSlot);
 
                     } else { // Object
                         super.visitVarInsn(Opcodes.ALOAD, currentSlot);
                         super.visitLdcInsn(probeId);
-                        super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "apply", "(Ljava/lang/Object;I)Ljava/lang/Object;", false);
+                        super.visitMethodInsn(Opcodes.INVOKESTATIC, PerturbationStrategy.GATE_CLASS, PerturbationStrategy.GATE_METHOD, PerturbationStrategy.DESC_OBJ, false);
                         super.visitTypeInsn(Opcodes.CHECKCAST, pType.asErasure().getInternalName());
                         super.visitVarInsn(Opcodes.ASTORE, currentSlot);
                     }
