@@ -9,14 +9,14 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-class AsmMethodAnalyser {
+public class AsmMethodAnalyser {
 
-    static class MethodLineInfo {
-        int firstLine = -1;
-        Set<Integer> returnLines = new HashSet<>();
+    public static class MethodLineInfo {
+        public int firstLine = -1;
+        public Set<Integer> returnLines = new HashSet<>();
     }
 
-    static Map<String, MethodLineInfo> analyseClass(ClassLoader loader, String classResourcePath) {
+    public static Map<String, MethodLineInfo> analyseClass(ClassLoader loader, String classResourcePath) {
         Map<String, MethodLineInfo> methodMap = new HashMap<>();
         if (loader == null) return methodMap;
 

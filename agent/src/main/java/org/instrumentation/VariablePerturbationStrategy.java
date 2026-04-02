@@ -9,7 +9,6 @@ import net.bytebuddy.jar.asm.Label;
 import net.bytebuddy.jar.asm.MethodVisitor;
 import net.bytebuddy.jar.asm.Opcodes;
 import net.bytebuddy.pool.TypePool;
-import org.probe.ProbeCatalog;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -23,7 +22,7 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
     public VariablePerturbationStrategy() {}
 
     @Override
-    public DynamicType.Builder<?> apply(DynamicType.Builder<?> builder) {
+    public DynamicType.Builder<?> apply(DynamicType.Builder<?> builder, TypeDescription typeDesc, ClassLoader classLoader, Map<String, AsmMethodAnalyser.MethodLineInfo> lineInfoMap) {
         return builder.visit(
                 new AsmVisitorWrapper.ForDeclaredMethods()
                         .method(any(), new VariableAssignmentPerturber())
@@ -46,7 +45,6 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
             }
 
             String asmDesc = instrumentedMethod.getDescriptor();
-
             return new VariablePerturbationVisitor(Opcodes.ASM9, methodVisitor, instrumentedMethod.toString(), asmDesc);
         }
     }
@@ -73,20 +71,15 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
         @Override
         public void visitVarInsn(int opcode, int varIndex) {
             if (opcode == Opcodes.ISTORE) {
-                int probeId = ProbeCatalog.idForLocation(methodName + ":var:" + varIndex);
-                ProbeCatalog.setLine(probeId, currentLine);
-                ProbeCatalog.setDescriptor(probeId, asmDesc);
-
-                pendingProbes.add(new PendingProbe(probeId, varIndex, "Integer/Boolean", false));
+                int probeId = ProbeRegistrar.registerVariable(methodName, varIndex, currentLine, asmDesc, "Integer/Boolean", false);
+                pendingProbes.add(new PendingProbe(probeId, varIndex));
 
                 super.visitLdcInsn(probeId);
                 super.visitMethodInsn(Opcodes.INVOKESTATIC, "org/probe/PerturbationGate", "apply", "(II)I", false);
 
             } else if (opcode == Opcodes.ASTORE) {
-                int probeId = ProbeCatalog.idForLocation(methodName + ":objVar:" + varIndex);
-                ProbeCatalog.setLine(probeId, currentLine);
-                ProbeCatalog.setDescriptor(probeId, asmDesc);
-                pendingProbes.add(new PendingProbe(probeId, varIndex, "Object", false));
+                int probeId = ProbeRegistrar.registerVariable(methodName, varIndex, currentLine, asmDesc, "Object", true);
+                pendingProbes.add(new PendingProbe(probeId, varIndex));
 
                 super.visitInsn(Opcodes.DUP);
                 super.visitLdcInsn(probeId);
@@ -102,10 +95,8 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
 
         @Override
         public void visitIincInsn(int varIndex, int increment) {
-            int probeId = ProbeCatalog.idForLocation(methodName + ":var:" + varIndex);
-            ProbeCatalog.setLine(probeId, currentLine);
-            ProbeCatalog.setDescriptor(probeId, asmDesc);
-            pendingProbes.add(new PendingProbe(probeId, varIndex, "Integer", true));
+            int probeId = ProbeRegistrar.registerVariable(methodName, varIndex, currentLine, asmDesc, "Integer", false);
+            pendingProbes.add(new PendingProbe(probeId, varIndex));
 
             super.visitVarInsn(Opcodes.ILOAD, varIndex);
             super.visitIntInsn(Opcodes.SIPUSH, increment);
@@ -118,12 +109,8 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
         @Override
         public void visitLocalVariable(String name, String descriptor, String signature, Label start, Label end, int index) {
             if (!name.equals("this") && !name.startsWith("this$")) {
-                String type = "unknown";
-                if (descriptor.equals("Z")) type = "boolean";
-                else if (descriptor.equals("I") || descriptor.equals("S") || descriptor.equals("B") || descriptor.equals("C")) type = "Integer";
-                else if (descriptor.startsWith("[") || descriptor.startsWith("L")) type = "Object";
-
-                if (!type.equals("unknown")) {
+                String type = ProbeRegistrar.resolveTypeName(descriptor);
+                if (!type.equals("Object") || descriptor.startsWith("[") || descriptor.startsWith("L")) {
                     lvtEntries.putIfAbsent(index, new LvtData(name, type));
                 }
             }
@@ -132,20 +119,18 @@ public class VariablePerturbationStrategy implements PerturbationStrategy {
 
         @Override
         public void visitEnd() {
-            boolean lvtPresent = !lvtEntries.isEmpty();
-
-            for (PendingProbe p : pendingProbes) {
-                if (lvtPresent && lvtEntries.containsKey(p.slot)) {
-                    LvtData data = lvtEntries.get(p.slot);
-                    ProbeCatalog.describe(p.id, "Modified " + data.type + " local variable '" + data.name + "' in " + methodName);
-                } else {
-                    ProbeCatalog.describe(p.id, "Modified " + p.fallbackType + " local variable (JVM slot " + p.slot + ") in " + methodName);
+            if (!lvtEntries.isEmpty()) {
+                for (PendingProbe p : pendingProbes) {
+                    if (lvtEntries.containsKey(p.slot)) {
+                        LvtData data = lvtEntries.get(p.slot);
+                        ProbeRegistrar.updateVariableDescription(p.id, methodName, data.name, data.type);
+                    }
                 }
             }
             super.visitEnd();
         }
 
-        private record PendingProbe(int id, int slot, String fallbackType, boolean isIinc) {}
+        private record PendingProbe(int id, int slot) {}
         private record LvtData(String name, String type) {}
     }
 }
