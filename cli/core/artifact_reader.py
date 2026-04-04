@@ -2,130 +2,133 @@ import json
 import os
 import re
 from collections import defaultdict
+from core.config import get_out_dir, FILE_PROBES, FILE_HITS, FILE_OUTCOMES, FILE_PERTURBATIONS
 
-from .config import FILE_HITS, FILE_OUTCOMES, FILE_PERTURBATIONS, FILE_PROBES, get_out_dir
+_GENERIC_RE = re.compile(r'<.*?>')
 
-_GENERIC_RE = re.compile(r"<.*?>")
-
-
-def parse_probe(description):
-    parts = description.rsplit(" in ", 1)
+def parse_probe(desc):
+    """
+    Extract all structured fields from a probe description string.
+    Returns (modifier, fqcn, method_name, location, operator)
+    """
+    parts = desc.rsplit(" in ", 1)
     if len(parts) != 2:
         return "unknown", "unknown", "unknown", "Unknown", "Unknown"
 
-    modifier = parts[0].replace("Modified ", "").strip()
-    signature = parts[1].strip()
+    mod = parts[0].replace("Modified ", "").strip()
+    sig = parts[1].strip()
 
-    modifier_lower = modifier.lower()
-    if "return" in modifier_lower:
-        location, location_abbreviation = "Return", "Ret"
-    elif "argument" in modifier_lower:
-        location, location_abbreviation = "Argument", "Arg"
-    elif "variable" in modifier_lower:
-        location, location_abbreviation = "Variable", "Var"
+    mod_lower = mod.lower()
+    if "return" in mod_lower:
+        location, loc_abbr = "Return", "Ret"
+    elif "argument" in mod_lower:
+        location, loc_abbr = "Argument", "Arg"
+    elif "variable" in mod_lower:
+        location, loc_abbr = "Variable", "Var"
     else:
-        location, location_abbreviation = "Unknown", "Unk"
+        location, loc_abbr = "Unknown", "Unk"
 
-    if "boolean" in modifier_lower:
-        type_abbreviation = "Boolean"
-    elif "integer" in modifier_lower or "int " in modifier_lower:
-        type_abbreviation = "Integer"
+    if "boolean" in mod_lower:
+        type_abbr = "Boolean"
+    elif "integer" in mod_lower or "int " in mod_lower:
+        type_abbr = "Integer"
     else:
-        type_abbreviation = "Object"
+        type_abbr = "Object"
 
-    operator = f"{location_abbreviation}-{type_abbreviation}"
+    operator = f"{loc_abbr}-{type_abbr}"
 
-    signature_prefix = signature.split("(")[0].strip()
-    signature_tokens = signature_prefix.split()
-    if not signature_tokens:
-        return modifier, "unknown", "unknown", location, operator
+    prefix = sig.split('(')[0].strip()
+    tokens = prefix.split()
+    if not tokens:
+        return mod, "unknown", "unknown", location, operator
 
-    fully_qualified_path = signature_tokens[-1]
-    path_segments = fully_qualified_path.split(".")
-    if len(path_segments) < 2:
-        return modifier, fully_qualified_path, "unknown", location, operator
+    fq_path = tokens[-1]
+    segments = fq_path.split('.')
+    if len(segments) < 2:
+        return mod, fq_path, "unknown", location, operator
 
     is_constructor = (
-        len(signature_tokens) == 1
-        or signature_tokens[-2] in ("public", "protected", "private")
-        or (path_segments[-1] and path_segments[-1][0].isupper())
+        len(tokens) == 1
+        or tokens[-2] in ('public', 'protected', 'private')
+        or (segments[-1] and segments[-1][0].isupper())
     )
-    # If there is no explicit return type (or the tail looks like a class name), treat it as a constructor.
 
     if is_constructor:
-        fully_qualified_class_name = fully_qualified_path
-        method_name = path_segments[-1]
+        fqcn = fq_path
+        method_name = segments[-1]
     else:
-        fully_qualified_class_name = ".".join(path_segments[:-1])
-        method_name = path_segments[-1]
+        fqcn = '.'.join(segments[:-1])
+        method_name = segments[-1]
 
-    # Probe strings can carry generic type bits that would break class/method matching later.
-    fully_qualified_class_name = _GENERIC_RE.sub("", fully_qualified_class_name)
-    method_name = _GENERIC_RE.sub("", method_name)
+    fqcn = _GENERIC_RE.sub('', fqcn)
+    method_name = _GENERIC_RE.sub('', method_name)
 
-    return modifier, fully_qualified_class_name, method_name, location, operator
+    return mod, fqcn, method_name, location, operator
 
 
 def _read_jsonl(project_dir: str, filename: str) -> list[dict]:
     path = os.path.join(get_out_dir(project_dir), filename)
     results = []
     try:
-        with open(path, encoding="utf-8") as jsonl_file:
-            for line_number, raw_line in enumerate(jsonl_file, 1):
-                line = raw_line.strip()
-                if not line:
-                    continue
+        with open(path, encoding="utf-8") as f:
+            for lineno, raw in enumerate(f, 1):
+                line = raw.strip()
+                if not line: continue
                 try:
                     results.append(json.loads(line))
                 except json.JSONDecodeError as exc:
-                    # One bad JSONL line should not block reading the rest of the artifact file.
-                    print(f"[artifact_reader] {filename}:{line_number}: skipping malformed line: {exc}")
+                    print(f"[artifact_reader] {filename}:{lineno}: skipping malformed line: {exc}")
     except FileNotFoundError:
         pass
     return results
-
 
 def read_probes(project_dir: str) -> dict[int, dict]:
     result = {}
     for obj in _read_jsonl(project_dir, FILE_PROBES):
         try:
-            probe_id = int(obj["id"])
-            result[probe_id] = {
-                "desc": obj.get("description", f"probe {probe_id}"),
+            pid = int(obj["id"])
+            result[pid] = {
+                "desc": obj.get("description", f"probe {pid}"),
                 "line": int(obj.get("line", -1)),
-                "asmDescriptor": obj.get("asmDescriptor", ""),
+                "asmDescriptor": obj.get("asmDescriptor", "")
             }
         except (KeyError, TypeError, ValueError):
             pass
     return result
 
-
 def read_hits(project_dir: str) -> defaultdict[int, set[str]]:
     hits: defaultdict[int, set[str]] = defaultdict(set)
     for obj in _read_jsonl(project_dir, FILE_HITS):
         try:
-            hits[int(obj["probe_id"])].add(obj["test"])
+            test_name = obj.get("test", "")
+            if test_name == "UNKNOWN_TEST":
+                continue # IGNORING THE GHOST EXECUTION!
+            hits[int(obj["probe_id"])].add(test_name)
         except (KeyError, TypeError, ValueError):
             pass
     return hits
-
 
 def read_test_outcomes(project_dir: str) -> dict[str, str]:
     result = {}
     for obj in _read_jsonl(project_dir, FILE_OUTCOMES):
         try:
-            result[obj["test"]] = obj["status"].strip()
+            test_name = obj.get("test", "")
+            if test_name == "UNKNOWN_TEST":
+                continue
+            result[test_name] = obj["status"].strip()
         except (KeyError, AttributeError):
             pass
     return result
-
 
 def read_perturbations(project_dir: str) -> defaultdict[str, list[str]]:
     actions_map: defaultdict[str, list[str]] = defaultdict(list)
     for obj in _read_jsonl(project_dir, FILE_PERTURBATIONS):
         try:
+            test_name = obj.get("test", "")
+            if test_name == "UNKNOWN_TEST":
+                continue
             action = f"{obj['original']} -> {obj['perturbed']}"
-            actions_map[obj["test"]].append(action)
+            actions_map[test_name].append(action)
         except KeyError:
             pass
     return actions_map
